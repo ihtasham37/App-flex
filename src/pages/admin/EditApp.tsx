@@ -33,6 +33,7 @@ export default function AdminEditApp() {
     fullDescription: '',
     mainImage: '',
     downloadUrl: '',
+    downloadButtonText: '',
     status: 'published',
     showOnBanner: false,
   });
@@ -67,6 +68,7 @@ export default function AdminEditApp() {
             fullDescription: data.fullDescription || '',
             mainImage: data.mainImage || '',
             downloadUrl: data.downloadUrl || '',
+            downloadButtonText: data.downloadButtonText || '',
             status: data.status || 'published',
             showOnBanner: data.showOnBanner || false,
           });
@@ -386,6 +388,14 @@ export default function AdminEditApp() {
               value={formData.downloadUrl}
               onChange={handleChange}
               required
+            />
+
+            <Input
+              label="Custom Download Button Text (Optional)"
+              name="downloadButtonText"
+              placeholder="e.g. Download Now, Play Store, Get App"
+              value={formData.downloadButtonText}
+              onChange={handleChange}
             />
           </GlassCard>
 

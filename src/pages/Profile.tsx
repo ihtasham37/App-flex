@@ -20,21 +20,11 @@ export default function Profile() {
   const { settings } = useSettings();
   const navigate = useNavigate();
 
-  const [downloadsCount, setDownloadsCount] = useState<number>(0);
   const [savedCount, setSavedCount] = useState<number>(0);
   const [loadingStats, setLoadingStats] = useState<boolean>(true);
 
   useEffect(() => {
     if (!user) return;
-
-    // Real-time downloads count for current user
-    const unsubDownloads = onSnapshot(
-      query(collection(db, 'downloads'), where('userId', '==', user.uid)),
-      (snap) => {
-        setDownloadsCount(snap.size);
-      },
-      (err) => console.warn('Could not fetch user downloads count:', err)
-    );
 
     // Real-time saved apps count for current user
     const unsubSaved = onSnapshot(
@@ -50,7 +40,6 @@ export default function Profile() {
     );
 
     return () => {
-      unsubDownloads();
       unsubSaved();
     };
   }, [user]);
@@ -62,7 +51,6 @@ export default function Profile() {
 
   const menuItems = [
     { label: 'Saved Applications', icon: Heart, path: '/saved', color: 'text-pink-500' },
-    { label: 'Download History', icon: Download, path: '/downloads', color: 'text-blue-500' },
     { label: 'Edit Name & Password', icon: Settings, path: '/settings', color: 'text-purple-500' },
   ];
 
@@ -80,12 +68,7 @@ export default function Profile() {
           </div>
           <div className="flex gap-4 pt-2">
             <div className="text-center px-4">
-               <p className="text-[10px] font-black uppercase text-blue-200">Downloads</p>
-               <p className="text-xl font-black">{loadingStats ? '...' : downloadsCount}</p>
-            </div>
-            <div className="w-px h-8 bg-white/20 self-center" />
-            <div className="text-center px-4">
-               <p className="text-[10px] font-black uppercase text-blue-200">Saved</p>
+               <p className="text-[10px] font-black uppercase text-blue-200">Saved Apps</p>
                <p className="text-xl font-black">{loadingStats ? '...' : savedCount}</p>
             </div>
           </div>

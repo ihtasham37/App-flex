@@ -256,6 +256,27 @@ export default function AdminSettings() {
                 />
               </div>
             </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Banner Button Text</label>
+              <Input 
+                value={formData.updateBanner.buttonText || ''}
+                onChange={(e) => setFormData({ 
+                  ...formData, 
+                  updateBanner: { ...formData.updateBanner, buttonText: e.target.value } 
+                })}
+                placeholder="e.g. Update Now, Install App, Get Started"
+                className="rounded-xl"
+              />
+              <p className="text-[10px] text-slate-400 font-medium">Text that appears on the main action button.</p>
+            </div>
+
+            <div className="p-3 bg-blue-50 border border-blue-100 rounded-2xl">
+              <p className="text-[11px] text-blue-700 font-bold leading-relaxed">
+                <Bell size={12} className="inline mr-1 mb-0.5" /> 
+                Note: This banner is linked to the "Catalog Version" above. Whenever you increment the Catalog Version (+1), this banner will automatically show again to all users who have already seen it.
+              </p>
+            </div>
           </div>
         </GlassCard>
 

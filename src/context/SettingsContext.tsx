@@ -9,6 +9,7 @@ interface UpdateBanner {
   description: string;
   image: string;
   link: string;
+  buttonText: string;
 }
 
 export interface AppSettings {
@@ -40,6 +41,7 @@ const defaultSettings: AppSettings = {
     description: 'Experience the latest features, better performance, and enhanced security. Get the official AppFlix app from the Play Store now.',
     image: '',
     link: '',
+    buttonText: 'Update Now',
   },
   supportEmail: '',
   supportWhatsapp: '',

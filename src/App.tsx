@@ -50,26 +50,6 @@ function AppContent() {
   const { isAdmin, loading: authLoading } = useAuth();
   const { loading: settingsLoading } = useSettings();
   const location = useLocation();
-  const [isAppAlreadyInstalled, setIsAppAlreadyInstalled] = useState<boolean>(() => {
-    const installedAt = localStorage.getItem('pwa_installed_at');
-    if (!installedAt) return false;
-    
-    // Check if it was marked as "installed/bypassed" within the last 24 hours
-    const lastCheck = parseInt(installedAt);
-    const now = Date.now();
-    const twentyFourHours = 24 * 60 * 60 * 1000;
-    
-    return (now - lastCheck) < twentyFourHours;
-  });
-
-  useEffect(() => {
-    const handleInstalled = () => {
-      localStorage.setItem('pwa_installed_at', Date.now().toString());
-      setIsAppAlreadyInstalled(true);
-    };
-    window.addEventListener('appinstalled', handleInstalled);
-    return () => window.removeEventListener('appinstalled', handleInstalled);
-  }, []);
 
   // Detect Android APK / AAB / WebView / Capacitor / TWA / Standalone mode
   const userAgent = navigator.userAgent || '';
@@ -86,9 +66,6 @@ function AppContent() {
 
   // Final check: is the user actually in the app?
   const isInApp = isStandalone || isAndroidWebView || isCapacitorOrNative || isAndroidTWA || isUrlAppFlag;
-  
-  // If not in the app, check if they recently bypassed/installed
-  const isBypassedRecently = isAppAlreadyInstalled;
 
   if (authLoading || settingsLoading) return <LoadingScreen />;
 
@@ -97,9 +74,8 @@ function AppContent() {
 
   // Show PWALandingPage if:
   // 1. Not currently in standalone app mode
-  // 2. AND have not bypassed/installed in the last 24 hours
-  // 3. AND not on an admin/auth page
-  if (!isInApp && !isBypassedRecently && !isAuthOrAdmin) {
+  // 2. AND not on an admin/auth page
+  if (!isInApp && !isAuthOrAdmin) {
     return <PWALandingPage />;
   }
 

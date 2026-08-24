@@ -31,6 +31,7 @@ interface AppData {
   mainImage: string;
   screenshots: string[];
   downloadUrl: string;
+  downloadButtonText?: string;
   status?: string;
   itemType?: 'app' | 'bundle' | 'pc';
   showOnBanner?: boolean;
@@ -456,11 +457,14 @@ export default function AppDetails() {
               loading={downloading}
             >
               <Download size={22} className="mr-2" />
-              {isBundle 
-                ? (app.size && app.size.trim() !== '' ? `Download Bundle (${app.size})` : 'Download Bundle')
-                : isPC
-                ? (app.size && app.size.trim() !== '' ? `Download PC Software (${app.size})` : 'Download PC Software')
-                : (app.size && app.size.trim() !== '' ? `Download APK (${app.size})` : 'Download APK')
+              {app.downloadButtonText && app.downloadButtonText.trim() !== '' 
+                ? app.downloadButtonText 
+                : (isBundle 
+                    ? (app.size && app.size.trim() !== '' ? `Download Bundle (${app.size})` : 'Download Bundle')
+                    : isPC
+                    ? (app.size && app.size.trim() !== '' ? `Download PC Software (${app.size})` : 'Download PC Software')
+                    : (app.size && app.size.trim() !== '' ? `Download APK (${app.size})` : 'Download APK')
+                  )
               }
             </Button>
 

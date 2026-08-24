@@ -9,21 +9,24 @@ export const UpdateBannerPopup = () => {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
-    // Show banner if enabled and not already completed by the user
-    const isCompleted = localStorage.getItem('banner_completed') === 'true';
-    if (settings.updateBanner?.enabled && !isCompleted) {
+    // Show banner if enabled and not already completed for the CURRENT catalog version
+    const currentCatalogVersion = settings.catalogVersion || 1;
+    const lastSeenCatalogVersion = parseInt(localStorage.getItem('banner_catalog_seen') || '0');
+    
+    if (settings.updateBanner?.enabled && lastSeenCatalogVersion < currentCatalogVersion) {
       const timer = setTimeout(() => setShow(true), 1500); // Show after 1.5s
       return () => clearTimeout(timer);
     }
-  }, [settings.updateBanner?.enabled]);
+  }, [settings.updateBanner?.enabled, settings.catalogVersion]);
 
   const handleClose = () => {
     setShow(false);
   };
 
   const handleUpdateClick = () => {
-    // Mark as completed so it doesn't show again
-    localStorage.setItem('banner_completed', 'true');
+    // Mark the current catalog version as seen so it doesn't show again for this update
+    const currentCatalogVersion = settings.catalogVersion || 1;
+    localStorage.setItem('banner_catalog_seen', currentCatalogVersion.toString());
     setShow(false);
   };
 
@@ -39,13 +42,6 @@ export const UpdateBannerPopup = () => {
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
             className="relative w-full max-w-lg bg-white rounded-3xl overflow-hidden shadow-2xl border border-white/20"
           >
-            {/* Close Button */}
-            <button 
-              onClick={handleClose}
-              className="absolute top-4 right-4 z-10 p-2 bg-slate-900/10 hover:bg-slate-900/20 rounded-full text-slate-700 transition-colors"
-            >
-              <X size={20} />
-            </button>
 
             <div className="flex flex-col">
               {/* Banner Image */}
@@ -74,25 +70,19 @@ export const UpdateBannerPopup = () => {
                   {settings.updateBanner.description}
                 </p>
 
-                <div className="pt-2 flex flex-col sm:flex-row gap-3">
+                <div className="pt-2 flex flex-col gap-3">
                   <a 
                     href={settings.updateBanner.link} 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="flex-1"
+                    className="w-full"
                     onClick={handleUpdateClick}
                   >
-                    <Button className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2">
-                      <Download size={20} />
-                      Update Now
+                    <Button className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-blue-600/30 flex items-center justify-center gap-2 text-lg transition-all active:scale-95">
+                      <Download size={24} />
+                      {settings.updateBanner.buttonText || 'Update Now'}
                     </Button>
                   </a>
-                  <button 
-                    onClick={handleClose}
-                    className="flex-1 h-12 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl font-black uppercase tracking-widest transition-colors"
-                  >
-                    Later
-                  </button>
                 </div>
               </div>
             </div>

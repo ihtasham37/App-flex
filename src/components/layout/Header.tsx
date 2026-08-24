@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
 import { Button } from '../ui/Button';
 import { AppLogo } from '../ui/AppLogo';
-import { LogIn, Shield, Bookmark, Film, Smartphone, Search, Zap } from 'lucide-react';
+import { LogIn, Shield, Bookmark, Film, Smartphone, Search, Zap, MessageCircle } from 'lucide-react';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 
@@ -111,14 +111,14 @@ export const Header = () => {
             </Link>
           )}
 
-          {/* Admin Dashboard link if admin */}
-          {isAdmin && (
-            <Link to="/admin">
-              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-black text-[10px] uppercase tracking-widest transition-all shadow-md shadow-slate-900/10">
-                <Shield size={12} className="text-blue-400" />
-                <span>Admin</span>
+          {/* WhatsApp Channel Link */}
+          {settings.whatsappChannel && (
+            <a href={settings.whatsappChannel} target="_blank" rel="noopener noreferrer">
+              <button className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-black text-[10px] uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/20 active:scale-95">
+                <MessageCircle size={16} className="text-white" fill="currentColor" />
+                <span className="hidden xs:inline ml-0.5">WhatsApp</span>
               </button>
-            </Link>
+            </a>
           )}
           
           {/* User Profile or Login */}

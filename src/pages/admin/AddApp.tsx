@@ -31,6 +31,7 @@ export default function AdminAddApp() {
     fullDescription: '',
     mainImage: '',
     downloadUrl: '',
+    downloadButtonText: '',
     status: 'published',
     showOnBanner: false,
   });
@@ -379,6 +380,14 @@ export default function AdminAddApp() {
               value={formData.downloadUrl}
               onChange={handleChange}
               required
+            />
+
+            <Input
+              label="Custom Download Button Text (Optional)"
+              name="downloadButtonText"
+              placeholder="e.g. Download Now, Play Store, Get App"
+              value={formData.downloadButtonText}
+              onChange={handleChange}
             />
           </GlassCard>
 

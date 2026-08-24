@@ -19,7 +19,6 @@ export const PWALandingPage: React.FC = () => {
     window.addEventListener('beforeinstallprompt', handler);
 
     const installedHandler = () => {
-      localStorage.setItem('pwa_installed_at', Date.now().toString());
       setInstalledSuccess(true);
       setDeferredPrompt(null);
       setInstalling(false);
@@ -40,10 +39,8 @@ export const PWALandingPage: React.FC = () => {
         const { outcome } = await deferredPrompt.userChoice;
         console.log(`User response to install prompt: ${outcome}`);
         if (outcome === 'accepted') {
-          localStorage.setItem('pwa_installed', 'true');
           setInstalledSuccess(true);
           setDeferredPrompt(null);
-          // Do not call onInstalled() here, so they stay on this screen to see the success message
         }
       } catch (err) {
         console.error("Install prompt error:", err);
@@ -119,16 +116,6 @@ export const PWALandingPage: React.FC = () => {
                   <span className="font-bold text-blue-600">Note:</span> If the app does not install automatically, tap your browser menu (<span className="font-bold text-slate-800">3 dots</span> at top right) and select <span className="font-bold text-blue-600">"Install app"</span> or <span className="font-bold text-blue-600">"Add to Home Screen"</span>.
                 </p>
               </div>
-
-              <button 
-                onClick={() => {
-                  localStorage.setItem('pwa_installed_at', Date.now().toString());
-                  window.location.reload();
-                }}
-                className="text-[11px] font-black text-slate-400 hover:text-slate-600 transition-colors uppercase tracking-widest underline underline-offset-4"
-              >
-                Or Continue to Website (Daily Check)
-              </button>
             </>
           )}
 
