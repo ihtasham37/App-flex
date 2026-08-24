@@ -71,11 +71,11 @@ export const PWALandingPage: React.FC = () => {
           </h1>
           <div className="space-y-2">
             <h2 className="text-2xl font-black text-slate-800">
-              {installedSuccess ? 'App Installed!' : 'Install App for Best Experience'}
+              {installedSuccess ? 'App Installed Successfully!' : 'Install App for Best Experience'}
             </h2>
             <p className="text-slate-500 font-medium leading-relaxed text-sm">
               {installedSuccess
-                ? 'App has been installed successfully! Please go to your phone\'s home screen or app drawer to open it.'
+                ? 'The app has been installed successfully. Please close this browser and open the app from your phone\'s home screen.'
                 : 'To browse our full catalog of premium apps, games, and bundles, please download and install the official app on your device.'}
             </p>
           </div>
@@ -95,9 +95,9 @@ export const PWALandingPage: React.FC = () => {
         <div className="pt-4 space-y-4">
           {installedSuccess ? (
             <div className="space-y-3">
-              <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 flex items-center justify-center gap-3 text-emerald-700 font-bold text-sm">
-                <CheckCircle2 size={22} className="text-emerald-600" />
-                <span>Go to your phone screen to open the app!</span>
+              <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 flex flex-col items-center justify-center gap-2 text-emerald-700 font-bold text-sm">
+                <CheckCircle2 size={32} className="text-emerald-600 mb-1" />
+                <span className="text-center">Installation Complete! Check your home screen.</span>
               </div>
             </div>
           ) : (

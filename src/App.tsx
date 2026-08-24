@@ -48,7 +48,7 @@ function ProtectedRoute({ children, adminOnly = false }: { children: React.React
 
 function AppContent() {
   const { isAdmin, loading: authLoading } = useAuth();
-  const { loading: settingsLoading } = useSettings();
+  const { loading: settingsLoading, settings } = useSettings();
   const location = useLocation();
 
   // Detect Android APK / AAB / WebView / Capacitor / TWA / Standalone mode
@@ -64,17 +64,62 @@ function AppContent() {
     window.matchMedia('(display-mode: minimal-ui)').matches || 
     (window.navigator as any).standalone === true;
 
-  // Final check: is the user actually in the app?
-  const isInApp = isStandalone || isAndroidWebView || isCapacitorOrNative || isAndroidTWA || isUrlAppFlag;
+  const [isActuallyInstalled, setIsActuallyInstalled] = useState<boolean | null>(null);
 
-  if (authLoading || settingsLoading) return <LoadingScreen />;
+  useEffect(() => {
+    const checkInstallation = async () => {
+      // 1. Standalone mode check (Most reliable)
+      if (isStandalone || isAndroidWebView || isCapacitorOrNative || isAndroidTWA || isUrlAppFlag) {
+        localStorage.setItem('pwa_installed', 'true');
+        localStorage.setItem('pwa_last_seen', Date.now().toString());
+        setIsActuallyInstalled(true);
+        return;
+      }
+
+      // 2. Direct check via API if available (only if not in iframe)
+      const isInIframe = window.self !== window.top;
+      if (!isInIframe && 'getInstalledRelatedApps' in navigator) {
+        try {
+          const relatedApps = await (navigator as any).getInstalledRelatedApps();
+          if (relatedApps && relatedApps.length > 0) {
+            setIsActuallyInstalled(true);
+            localStorage.setItem('pwa_installed', 'true');
+            localStorage.setItem('pwa_last_seen', Date.now().toString());
+            return;
+          }
+        } catch (e) {
+          console.warn("getInstalledRelatedApps not supported or blocked:", e);
+        }
+      }
+
+      // 3. Browser check with time limit (handles the "deleted app" case)
+      const hasFlag = localStorage.getItem('pwa_installed') === 'true';
+      const lastSeen = parseInt(localStorage.getItem('pwa_last_seen') || '0');
+      const threeDays = 3 * 24 * 60 * 60 * 1000;
+      
+      if (hasFlag && (Date.now() - lastSeen < threeDays)) {
+        setIsActuallyInstalled(true);
+      } else {
+        // If it's been too long or no flag, we assume it's uninstalled or needs re-check
+        setIsActuallyInstalled(false);
+        if (hasFlag) localStorage.removeItem('pwa_installed');
+      }
+    };
+
+    checkInstallation();
+  }, [isStandalone, isAndroidWebView, isCapacitorOrNative, isAndroidTWA, isUrlAppFlag]);
+
+  if (authLoading || settingsLoading || isActuallyInstalled === null) return <LoadingScreen />;
 
   const path = location.pathname;
-  const isAuthOrAdmin = path.startsWith('/login') || path.startsWith('/signup') || path.startsWith('/admin') || isAdmin;
+  // Admin and Auth are allowed in browser for setup/login
+  const isAuthOrAdmin = path.startsWith('/login') || path.startsWith('/signup') || path.startsWith('/admin');
 
-  // Show PWALandingPage if:
-  // 1. Not currently in standalone app mode
-  // 2. AND not on an admin/auth page
+  // Final check: is the user actually in the app or recently verified?
+  const isInIframe = window.self !== window.top;
+  const isInApp = isStandalone || isAndroidWebView || isCapacitorOrNative || isAndroidTWA || isUrlAppFlag || isActuallyInstalled || isInIframe;
+
+  // Show PWALandingPage if not in app and not on admin/auth page
   if (!isInApp && !isAuthOrAdmin) {
     return <PWALandingPage />;
   }
