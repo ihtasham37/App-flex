@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { cacheService, CACHE_KEYS, DEFAULT_CACHE_TTL } from '../lib/cacheService';
+import { cacheService, CACHE_KEYS } from '../lib/cacheService';
 
 interface UpdateBanner {
   enabled: boolean;
@@ -68,7 +68,7 @@ const defaultSettings: AppSettings = {
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
 const getInitialSettings = (): AppSettings => {
-  const cachedSettings = cacheService.get<AppSettings>(CACHE_KEYS.SETTINGS, DEFAULT_CACHE_TTL);
+  const cachedSettings = cacheService.get<AppSettings>(CACHE_KEYS.SETTINGS);
   if (cachedSettings) return cachedSettings;
   
   const cachedName = typeof window !== 'undefined' ? localStorage.getItem('app_flix_name') : null;
@@ -81,7 +81,7 @@ const getInitialSettings = (): AppSettings => {
 export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [settings, setSettings] = useState<AppSettings>(getInitialSettings);
   const [loading, setLoading] = useState(() => {
-    return !cacheService.get<AppSettings>(CACHE_KEYS.SETTINGS, DEFAULT_CACHE_TTL);
+    return !cacheService.get<AppSettings>(CACHE_KEYS.SETTINGS);
   });
 
   useEffect(() => {

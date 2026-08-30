@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { cacheService, CACHE_KEYS, DEFAULT_CACHE_TTL } from '../lib/cacheService';
+import { cacheService, CACHE_KEYS } from '../lib/cacheService';
 
 export interface AdItem {
   id: string; // 'ad_1' | 'ad_2' | 'ad_3' | 'ad_4' | 'ad_5' | 'ad_6'
@@ -82,7 +82,7 @@ function getRNG(seedStr: string) {
 
 export const AdsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [adSettings, setAdSettings] = useState<AdSettingsData>(() => {
-    const cached = cacheService.get<AdSettingsData>(CACHE_KEYS.ADS, DEFAULT_CACHE_TTL);
+    const cached = cacheService.get<AdSettingsData>(CACHE_KEYS.ADS);
     if (cached) {
       return {
         ...defaultAdSettings,
@@ -97,7 +97,7 @@ export const AdsProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
   
   const [loading, setLoading] = useState(() => {
-    return !cacheService.get<AdSettingsData>(CACHE_KEYS.ADS, DEFAULT_CACHE_TTL);
+    return !cacheService.get<AdSettingsData>(CACHE_KEYS.ADS);
   });
 
   // Session seed for randomized page ad cycles
