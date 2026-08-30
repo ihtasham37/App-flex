@@ -25,11 +25,17 @@ export interface AppSettings {
   defaultBundlesDescription?: string;
   catalogVersion?: number;
   lastCatalogUpdate?: number;
+  codeReleaseVersion?: number;
+  lastCodeReleaseTime?: number;
+  codeReleaseNote?: string;
+  autoReloadClients?: boolean;
 }
 
 interface SettingsContextType {
   settings: AppSettings;
   updateSettings: (newSettings: Partial<AppSettings>) => Promise<void>;
+  broadcastCodeUpdate: (note?: string) => Promise<{ codeVersion: number }>;
+  syncAllCatalogAndCode: (note?: string) => Promise<{ catalogVersion: number; codeVersion: number }>;
   loading: boolean;
 }
 
@@ -53,6 +59,10 @@ const defaultSettings: AppSettings = {
   defaultBundlesDescription: 'Download premium video editing packs, Lightroom presets, Premiere Pro templates, cinematic LUTs, overlays, and sound FX bundles on APPFLEX.',
   catalogVersion: 1,
   lastCatalogUpdate: Date.now(),
+  codeReleaseVersion: 1,
+  lastCodeReleaseTime: Date.now(),
+  codeReleaseNote: 'Initial production build with ultra-fast caching.',
+  autoReloadClients: true,
 };
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -142,8 +152,58 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     await setDoc(doc(db, 'settings', 'global'), updated);
   };
 
+  /**
+   * Broadcasts a new code update release to all active and returning users.
+   * Increments codeReleaseVersion in Firestore settings, prompting all mobile & desktop clients
+   * to automatically reload and get latest GitHub / Vite build assets.
+   */
+  const broadcastCodeUpdate = async (note?: string) => {
+    const nextCodeVersion = (settings.codeReleaseVersion || 1) + 1;
+    const updateData: Partial<AppSettings> = {
+      codeReleaseVersion: nextCodeVersion,
+      lastCodeReleaseTime: Date.now(),
+      codeReleaseNote: note || 'New feature update deployed and ready.',
+      autoReloadClients: true,
+    };
+
+    // Also update local cache for the admin
+    const updated = { ...settings, ...updateData };
+    cacheService.set(CACHE_KEYS.SETTINGS, updated);
+    await setDoc(doc(db, 'settings', 'global'), updated);
+    return { codeVersion: nextCodeVersion };
+  };
+
+  /**
+   * 1-Click Complete System Sync:
+   * Increments both Catalog Version (for fresh app listings) and Code Release Version (for fresh GitHub frontend features).
+   */
+  const syncAllCatalogAndCode = async (note?: string) => {
+    const nextCatalogVersion = (settings.catalogVersion || 1) + 1;
+    const nextCodeVersion = (settings.codeReleaseVersion || 1) + 1;
+    
+    const updateData: Partial<AppSettings> = {
+      catalogVersion: nextCatalogVersion,
+      lastCatalogUpdate: Date.now(),
+      codeReleaseVersion: nextCodeVersion,
+      lastCodeReleaseTime: Date.now(),
+      codeReleaseNote: note || 'Comprehensive platform and catalog sync applied.',
+      autoReloadClients: true,
+    };
+
+    const updated = { ...settings, ...updateData };
+    cacheService.set(CACHE_KEYS.SETTINGS, updated);
+    await setDoc(doc(db, 'settings', 'global'), updated);
+    return { catalogVersion: nextCatalogVersion, codeVersion: nextCodeVersion };
+  };
+
   return (
-    <SettingsContext.Provider value={{ settings, updateSettings, loading }}>
+    <SettingsContext.Provider value={{ 
+      settings, 
+      updateSettings, 
+      broadcastCodeUpdate, 
+      syncAllCatalogAndCode, 
+      loading 
+    }}>
       {children}
     </SettingsContext.Provider>
   );

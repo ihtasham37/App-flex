@@ -7,6 +7,7 @@ import { AppsProvider } from './context/AppsContext';
 import { MainLayout } from './components/layout/MainLayout';
 import { PWALandingPage } from './components/PWALandingPage';
 import { PWAUpdater } from './components/PWAUpdater';
+import { LiveUpdateListener } from './components/LiveUpdateListener';
 import { LoadingScreen } from './components/LoadingScreen';
 import { useSettings } from './context/SettingsContext';
 
@@ -168,6 +169,7 @@ export default function App() {
         <AdsProvider>
           <AppsProvider>
             <PWAUpdater />
+            <LiveUpdateListener />
             <Router>
               <AppContent />
             </Router>
