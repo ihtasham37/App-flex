@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Button } from '../components/ui/Button';
 import { Star, Film, ArrowRight, ShieldCheck, Smartphone, Monitor, Search as SearchIcon, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -6,7 +6,6 @@ import { cn, isAppItem, isBundleItem, isPCItem } from '../lib/utils';
 import { useSettings } from '../context/SettingsContext';
 import { useApps } from '../context/AppsContext';
 import { AdSlot } from '../components/ads/AdSlot';
-import { DesktopSidebar } from '../components/DesktopSidebar';
 import { SEO } from '../components/SEO';
 
 interface AppData {
@@ -37,39 +36,24 @@ interface HomeLine {
 export default function Home() {
   const { settings } = useSettings();
   const { apps, getCategoryName, loading: appsLoading } = useApps();
-  const [allItems, setAllItems] = useState<AppData[]>([]);
-  const [bannerApps, setBannerApps] = useState<AppData[]>([]);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
   const [pageVisitId] = useState(() => Math.random().toString(36).substring(2, 9));
-  const [randomizedLines, setRandomizedLines] = useState<HomeLine[]>([]);
 
-  // Derive unique categories for sidebar
-  const allCategories = Array.from(new Set(allItems.map(i => getCategoryName(i.category)).filter(Boolean)));
+  // Compute banner apps stably
+  const bannerApps = useMemo<AppData[]>(() => {
+    if (!apps || apps.length === 0) return [];
+    const banners = apps.filter(item => item.isBanner || (item as any).showOnBanner);
+    return banners.length > 0 ? banners : apps.slice(0, 5);
+  }, [apps]);
 
-  const shuffle = <T,>(array: T[]): T[] => {
-    const newArr = [...array];
-    for (let i = newArr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
-    }
-    return newArr;
-  };
+  // Derive lines cleanly with useMemo so scroll / re-render never shakes or flickers
+  const lines = useMemo<HomeLine[]>(() => {
+    if (!apps || apps.length === 0) return [];
 
-  useEffect(() => {
-    if (!apps) return;
-    const published = apps; // Show all items, ignore status for now
-    const shuffledItems = shuffle(published);
-    setAllItems(shuffledItems);
+    const appsOnly = apps.filter(isAppItem);
+    const bundlesOnly = apps.filter(isBundleItem);
+    const pcOnly = apps.filter(isPCItem);
 
-    // 1. Banner items
-    const banners = published.filter(item => item.showOnBanner);
-    setBannerApps(banners.length > 0 ? banners : published.slice(0, 5));
-
-    const appsOnly = published.filter(isAppItem);
-    const bundlesOnly = published.filter(isBundleItem);
-    const pcOnly = published.filter(isPCItem);
-
-    // Group items by resolved category name
     const groupItems = (items: AppData[]) => {
       const groups: { [cat: string]: AppData[] } = {};
       items.forEach(item => {
@@ -84,102 +68,90 @@ export default function Home() {
     const bundleGroups = groupItems(bundlesOnly);
     const pcGroups = groupItems(pcOnly);
 
-    // 1. Top/Featured Lines (Always appear in the FIRST lines on Home, randomly shuffled among themselves)
-    const topLines: HomeLine[] = [];
+    const allLines: HomeLine[] = [];
 
+    // 1. Featured lines
     if (bundlesOnly.length > 0) {
-      topLines.push({
+      allLines.push({
         key: 'top-bundles',
         type: 'bundle',
         title: 'Trending Video Bundles',
-        items: shuffle(bundlesOnly),
+        items: bundlesOnly,
         seeAllPath: '/bundles'
       });
     }
 
     if (appsOnly.length > 0) {
-      topLines.push({
+      allLines.push({
         key: 'top-apps',
         type: 'app',
         title: 'Popular Android Apps',
-        items: shuffle(appsOnly),
+        items: appsOnly,
         seeAllPath: '/explore'
       });
     }
 
     if (pcOnly.length > 0) {
-      topLines.push({
+      allLines.push({
         key: 'top-pc',
         type: 'pc',
         title: 'PC & Windows Software',
-        items: shuffle(pcOnly),
+        items: pcOnly,
         seeAllPath: '/pc'
       });
     }
 
-    // 2. Category Lines (Appear below the top lines, randomly shuffled)
-    const categoryLines: HomeLine[] = [];
-
-    // Dynamic Category Lines for Bundles
+    // 2. Category lines
     Object.entries(bundleGroups).forEach(([catName, list]) => {
       if (list.length > 0) {
-        categoryLines.push({
+        allLines.push({
           key: `bundle-cat-${catName}`,
           type: 'bundle',
           title: catName,
-          items: shuffle(list),
+          items: list,
           seeAllPath: '/bundles'
         });
       }
     });
 
-    // Dynamic Category Lines for Apps
     Object.entries(appGroups).forEach(([catName, list]) => {
       if (list.length > 0) {
-        categoryLines.push({
+        allLines.push({
           key: `app-cat-${catName}`,
           type: 'app',
           title: catName,
-          items: shuffle(list),
+          items: list,
           seeAllPath: `/explore?category=${encodeURIComponent(catName)}`
         });
       }
     });
 
-    // Dynamic Category Lines for PC
     Object.entries(pcGroups).forEach(([catName, list]) => {
       if (list.length > 0) {
-        categoryLines.push({
+        allLines.push({
           key: `pc-cat-${catName}`,
           type: 'pc',
           title: catName,
-          items: shuffle(list),
+          items: list,
           seeAllPath: '/pc'
         });
       }
     });
 
-    // Top lines (randomized) followed by all category lines (randomized)
-    const combinedLines = [...shuffle(topLines), ...shuffle(categoryLines)];
-    setRandomizedLines(combinedLines);
+    return allLines;
   }, [apps, getCategoryName]);
 
-  const loading = appsLoading && allItems.length === 0;
-
-  // Auto-rotate Banner Every 2 Seconds
+  // Auto-rotate Banner Every 4 Seconds (smooth and non-intrusive)
   useEffect(() => {
     if (bannerApps.length <= 1) return;
     const interval = setInterval(() => {
       setCurrentBannerIndex(prev => (prev + 1) % bannerApps.length);
-    }, 2000);
+    }, 4000);
     return () => clearInterval(interval);
   }, [bannerApps.length]);
 
   const activeBanner = bannerApps[currentBannerIndex] || null;
 
-  // Render a Single Category/Type Line on Home Page
-  // - type 'app': SMALL CHOTA SQUARE CARD
-  // - type 'pc' or 'bundle': WIDE LANDSCAPE RECTANGULAR CARD (2 on mobile, 3 on desktop)
   const renderHomeLine = (
     type: 'app' | 'bundle' | 'pc',
     title: string,
@@ -221,7 +193,6 @@ export default function Home() {
             </h2>
           </div>
           
-          {/* SEE ALL OPTION */}
           <Link 
             to={seeAllPath} 
             className={`text-[11px] font-black ${textColor} hover:underline flex items-center gap-0.5 uppercase tracking-wider`}
@@ -230,21 +201,21 @@ export default function Home() {
           </Link>
         </div>
 
-        {/* CARDS DISPLAY: WIDE LANDSCAPE (PC & Bundles) vs SMALL SQUARE (Android Apps) */}
+        {/* CARDS DISPLAY */}
         {isWideFormat ? (
-          /* Wide Landscape Sliding Row (2 visible on mobile, 3 on desktop) */
-          <div className="flex gap-2.5 sm:gap-3 overflow-x-auto pb-3 pt-1 scrollbar-hide snap-x snap-mandatory -mx-1 px-1 scroll-smooth">
+          <div className="flex gap-2.5 sm:gap-3 overflow-x-auto pb-3 pt-1 scrollbar-hide snap-x snap-mandatory -mx-1 px-1">
             {items.map((item) => (
               <Link 
                 key={item.id} 
                 to={`/apps/${item.id}`} 
                 className="snap-start shrink-0 w-[calc(48.5%-5px)] min-w-[155px] sm:w-[260px] md:w-[calc(33.333%-8px)] max-w-[340px] group block select-none"
               >
-                <div className={`p-2 sm:p-2.5 bg-white rounded-2xl border border-slate-200/90 ${hoverBorder} shadow-xs hover:shadow-lg transition-all flex items-center gap-2.5 sm:gap-3 h-[74px] sm:h-[82px] text-left`}>
+                <div className={`p-2 sm:p-2.5 bg-white rounded-2xl border border-slate-200/90 ${hoverBorder} shadow-xs hover:shadow-md transition-all flex items-center gap-2.5 sm:gap-3 h-[74px] sm:h-[82px] text-left`}>
                   <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl overflow-hidden bg-slate-100 border border-slate-100 shrink-0 shadow-xs">
                     <img 
                       src={item.mainImage} 
                       alt={item.name} 
+                      loading="lazy"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
                     />
                   </div>
@@ -269,8 +240,7 @@ export default function Home() {
             ))}
           </div>
         ) : (
-          /* Classic Small Compact Square Icon Row (Android Apps) */
-          <div className="flex gap-2.5 sm:gap-3.5 overflow-x-auto pb-3 pt-1 scrollbar-hide snap-x snap-mandatory -mx-1 px-1 scroll-smooth">
+          <div className="flex gap-2.5 sm:gap-3.5 overflow-x-auto pb-3 pt-1 scrollbar-hide snap-x snap-mandatory -mx-1 px-1">
             {items.map((item) => (
               <Link 
                 key={item.id} 
@@ -281,6 +251,7 @@ export default function Home() {
                   <img 
                     src={item.mainImage} 
                     alt={item.name} 
+                    loading="lazy"
                     className="w-full h-full object-cover rounded-xl" 
                   />
                 </div>
@@ -309,12 +280,6 @@ export default function Home() {
         keywords="APKs, PC software, Lightroom presets, Premiere Pro templates, APPFLEX, download apps, video bundles"
       />
       <div className="lg:col-span-8 xl:col-span-9 space-y-6">
-        {loading && (
-          <div className="fixed top-0 left-0 w-full h-1 bg-slate-100 z-[100]">
-            <div className="h-full bg-blue-600 animate-[loading_1.5s_infinite_ease-in-out] w-1/3 shadow-[0_0_10px_rgba(37,99,235,0.5)]" />
-          </div>
-        )}
-        
         {/* Quick Search Widget */}
         <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200/90 shadow-xs space-y-2.5">
           <Link to="/search" className="block group">
@@ -354,12 +319,16 @@ export default function Home() {
           </div>
         </div>
 
-        {/* 1. Hero Auto-rotating Banner */}
+        {/* 1. Hero Banner */}
         {activeBanner ? (
           <section className="relative w-full aspect-[16/8] sm:aspect-[21/8] lg:aspect-[21/7] rounded-2xl overflow-hidden shadow-md border border-slate-200/90 bg-slate-950 select-none group">
             <Link to={`/apps/${activeBanner.id}`} className="block w-full h-full">
               <div className="absolute inset-0">
-                <img src={activeBanner.mainImage} alt={activeBanner.name} className="w-full h-full object-cover opacity-85 group-hover:scale-105 transition-all duration-700 ease-out" />
+                <img 
+                  src={activeBanner.mainImage} 
+                  alt={activeBanner.name} 
+                  className="w-full h-full object-cover opacity-85 group-hover:scale-105 transition-all duration-700 ease-out" 
+                />
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/45 to-transparent" />
               </div>
               <div className="absolute bottom-0 left-0 p-4 sm:p-6 w-full flex items-end justify-between gap-3">
@@ -381,9 +350,9 @@ export default function Home() {
           </section>
         ) : null}
 
-        {/* 2. Randomized Category Lines with See All & Ads after every 5 lines */}
+        {/* 2. Category Lines with Ads after every 5 lines */}
         <div className="space-y-7">
-          {randomizedLines.map((line, idx) => (
+          {lines.map((line, idx) => (
             <React.Fragment key={line.key}>
               {renderHomeLine(line.type, line.title, line.items, line.seeAllPath)}
               
@@ -410,12 +379,6 @@ export default function Home() {
           </div>
         </div>
       </div>
-
-      {/* Desktop Sidebar */}
-      <div className="lg:col-span-4 xl:col-span-3">
-        <DesktopSidebar categories={allCategories} trendingApps={allItems.filter(isAppItem).slice(0, 5)} />
-      </div>
     </div>
   );
 }
-

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useSettings } from '../context/SettingsContext';
 import { cacheService } from '../lib/cacheService';
-import { Sparkles, RefreshCw, X, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Sparkles, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Button } from './ui/Button';
 
@@ -13,15 +13,21 @@ export function LiveUpdateListener() {
   const autoReloadTimer = useRef<any>(null);
   const countdownInterval = useRef<any>(null);
 
-  const initialCodeVersion = useRef<number>(() => {
-    const cached = localStorage.getItem('appflex_client_code_version');
-    return cached ? parseInt(cached, 10) : 0;
-  });
+  const getStoredVersion = (): number => {
+    if (typeof window === 'undefined') return 0;
+    const v = localStorage.getItem('appflex_client_code_version');
+    return v ? parseInt(v, 10) : 0;
+  };
 
   const performUpdateAndReload = async () => {
     setIsUpdating(true);
     try {
-      // 1. Purge APPFLEX data and catalog caches
+      const serverVersion = settings.codeReleaseVersion || 1;
+      
+      // Save version FIRST to prevent loop
+      localStorage.setItem('appflex_client_code_version', serverVersion.toString());
+
+      // 1. Clear caches
       cacheService.clearAll();
 
       // 2. Clear Browser Cache API / Service Worker caches
@@ -46,15 +52,10 @@ export function LiveUpdateListener() {
         }
       }
 
-      // 4. Save current version so we don't trigger again
-      if (settings.codeReleaseVersion) {
-        localStorage.setItem('appflex_client_code_version', settings.codeReleaseVersion.toString());
-      }
-
-      // 5. Hard reload page with timestamp bypass
+      // 4. Reload page
       setTimeout(() => {
         window.location.reload();
-      }, 300);
+      }, 200);
     } catch (err) {
       console.error('[UpdateListener] Error during update reload:', err);
       window.location.reload();
@@ -65,7 +66,7 @@ export function LiveUpdateListener() {
     const serverVersion = settings.codeReleaseVersion;
     if (!serverVersion || serverVersion <= 0) return;
 
-    const localVersion = initialCodeVersion.current();
+    const localVersion = getStoredVersion();
 
     // If first-ever launch on this device/browser, save and don't interrupt
     if (localVersion === 0) {
@@ -73,36 +74,50 @@ export function LiveUpdateListener() {
       return;
     }
 
-    // If server version is greater than local version, a new GitHub/code update was published by admin!
+    // If server version is strictly greater than local version, trigger once!
     if (serverVersion > localVersion) {
-      console.log(`[LiveUpdateListener] New Code Release detected: Server v${serverVersion} > Local v${localVersion}`);
+      console.log(`[LiveUpdateListener] New Code Release: Server v${serverVersion} > Local v${localVersion}`);
       setShowUpdateModal(true);
 
-      // Start countdown for automatic update
+      // Start countdown
       setCountdown(3);
+      if (countdownInterval.current) clearInterval(countdownInterval.current);
       countdownInterval.current = setInterval(() => {
         setCountdown((prev) => {
           if (prev <= 1) {
-            clearInterval(countdownInterval.current);
+            if (countdownInterval.current) clearInterval(countdownInterval.current);
             return 0;
           }
           return prev - 1;
         });
       }, 1000);
 
-      // Trigger automatic reload after 3.5 seconds if autoReloadClients is enabled
+      // Automatic reload if enabled
       if (settings.autoReloadClients !== false) {
+        if (autoReloadTimer.current) clearTimeout(autoReloadTimer.current);
         autoReloadTimer.current = setTimeout(() => {
           performUpdateAndReload();
         }, 3500);
       }
+    } else {
+      setShowUpdateModal(false);
     }
 
     return () => {
       if (autoReloadTimer.current) clearTimeout(autoReloadTimer.current);
       if (countdownInterval.current) clearInterval(countdownInterval.current);
     };
-  }, [settings.codeReleaseVersion]);
+  }, [settings.codeReleaseVersion, settings.autoReloadClients]);
+
+  const handleDismiss = () => {
+    // If user clicks later, update local version so modal does NOT keep popping up repeatedly
+    if (settings.codeReleaseVersion) {
+      localStorage.setItem('appflex_client_code_version', settings.codeReleaseVersion.toString());
+    }
+    setShowUpdateModal(false);
+    if (autoReloadTimer.current) clearTimeout(autoReloadTimer.current);
+    if (countdownInterval.current) clearInterval(countdownInterval.current);
+  };
 
   if (!showUpdateModal) return null;
 
@@ -153,7 +168,7 @@ export function LiveUpdateListener() {
                 </Button>
 
                 <button 
-                  onClick={() => setShowUpdateModal(false)}
+                  onClick={handleDismiss}
                   className="px-3 py-2 text-xs font-bold text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors"
                 >
                   Later

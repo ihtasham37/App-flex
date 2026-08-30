@@ -63,15 +63,14 @@ export const AppsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return !cached || cached.length === 0;
   });
 
-  const lastCatalogVersion = useRef<number | null>(() => {
-    const v = cacheService.get<number>(CACHE_KEYS.CATALOG_VERSION);
-    return v !== null ? v : null;
-  });
+  // Keep stable refs to avoid recreating fetchCatalog and triggering re-render loops
+  const appsRef = useRef<AppItemData[]>(apps);
+  appsRef.current = apps;
 
-  const lastSyncTime = useRef<number>(() => {
-    const t = cacheService.get<number>(CACHE_KEYS.LAST_SYNC_TIME);
-    return t ? t : 0;
-  });
+  const categoriesRef = useRef<CategoryData[]>(categories);
+  categoriesRef.current = categories;
+
+  const isSyncingRef = useRef<boolean>(false);
 
   // Hydrate from high-capacity IndexedDB on mount (ensures large 50MB+ datasets load fully)
   useEffect(() => {
@@ -82,7 +81,7 @@ export const AppsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const idbCats = await cacheService.getAsync<CategoryData[]>(CACHE_KEYS.CATEGORIES);
         if (isMounted && idbApps && idbApps.length > 0) {
           setApps(idbApps);
-          if (idbCats) setCategories(idbCats);
+          if (idbCats && idbCats.length > 0) setCategories(idbCats);
           setLoading(false);
         }
       } catch (err) {
@@ -95,15 +94,24 @@ export const AppsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const fetchCatalog = useCallback(async (force = false) => {
+    if (isSyncingRef.current) return;
+    isSyncingRef.current = true;
+
     // 1. Retrieve current lifetime cached apps
-    const currentApps = (await cacheService.getAsync<AppItemData[]>(CACHE_KEYS.APPS)) || apps;
-    const currentCats = (await cacheService.getAsync<CategoryData[]>(CACHE_KEYS.CATEGORIES)) || categories;
+    const currentApps = appsRef.current.length > 0 
+      ? appsRef.current 
+      : (await cacheService.getAsync<AppItemData[]>(CACHE_KEYS.APPS)) || [];
+    
+    const currentCats = categoriesRef.current.length > 0 
+      ? categoriesRef.current 
+      : (await cacheService.getAsync<CategoryData[]>(CACHE_KEYS.CATEGORIES)) || [];
+      
     const cachedVer = cacheService.get<number>(CACHE_KEYS.CATALOG_VERSION);
     const syncTime = cacheService.get<number>(CACHE_KEYS.LAST_SYNC_TIME) || 0;
 
     // SMART LIFETIME ZERO-READ PATH:
     // If we have cached apps and catalogVersion hasn't changed on server, DO NOT QUERY FIRESTORE!
-    // Result: 0 Reads used on all repeated visits.
+    // Result: 0 Reads used on all repeated visits & 0 lag.
     if (!force && 
         settings.catalogVersion !== undefined && 
         cachedVer === settings.catalogVersion && 
@@ -111,6 +119,7 @@ export const AppsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setApps(currentApps);
       setCategories(currentCats);
       setLoading(false);
+      isSyncingRef.current = false;
       return;
     }
 
@@ -202,8 +211,9 @@ export const AppsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } finally {
       setLoading(false);
+      isSyncingRef.current = false;
     }
-  }, [settings.catalogVersion, apps, categories]);
+  }, [settings.catalogVersion]);
 
   useEffect(() => {
     if (settings.catalogVersion !== undefined) {
@@ -223,15 +233,15 @@ export const AppsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const getCategoryName = useCallback((catIdOrName?: string): string => {
     if (!catIdOrName) return 'General';
-    const found = categories.find(
+    const found = categoriesRef.current.find(
       c => c.id === catIdOrName || c.name?.toLowerCase().trim() === catIdOrName.toLowerCase().trim()
     );
     return found ? found.name : catIdOrName;
-  }, [categories]);
+  }, []);
 
   const getAppById = async (id: string): Promise<AppItemData | null> => {
     // 1. Check in-memory state (0 reads)
-    const found = apps.find(a => a.id === id);
+    const found = appsRef.current.find(a => a.id === id);
     if (found) return found;
 
     // 2. Check lifetime storage (0 reads)

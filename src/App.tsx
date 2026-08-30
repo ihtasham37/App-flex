@@ -1,21 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { SettingsProvider } from './context/SettingsContext';
-import { AdsProvider } from './context/AdsContext';
+import { SettingsProvider, useSettings } from './context/SettingsContext';
 import { AppsProvider } from './context/AppsContext';
+import { AdsProvider } from './context/AdsContext';
 import { MainLayout } from './components/layout/MainLayout';
 import { PWALandingPage } from './components/PWALandingPage';
 import { PWAUpdater } from './components/PWAUpdater';
 import { LiveUpdateListener } from './components/LiveUpdateListener';
 import { LoadingScreen } from './components/LoadingScreen';
-import { useSettings } from './context/SettingsContext';
 
 // Pages
 import Home from './pages/Home';
 import Explore from './pages/Explore';
-import Bundles from './pages/Bundles';
 import PCApps from './pages/PCApps';
+import Bundles from './pages/Bundles';
 import Search from './pages/Search';
 import AppDetails from './pages/AppDetails';
 import Login from './pages/auth/Login';
@@ -66,7 +65,17 @@ function AppContent() {
     window.matchMedia('(display-mode: minimal-ui)').matches || 
     (window.navigator as any).standalone === true;
 
-  const [isActuallyInstalled, setIsActuallyInstalled] = useState<boolean | null>(null);
+  // Initialize from localStorage synchronously to eliminate the 1-second loading blink
+  const [isActuallyInstalled, setIsActuallyInstalled] = useState<boolean>(() => {
+    if (isStandalone || isAndroidWebView || isCapacitorOrNative || isAndroidTWA || isUrlAppFlag) return true;
+    if (typeof window !== 'undefined') {
+      const hasFlag = localStorage.getItem('pwa_installed') === 'true';
+      const lastSeen = parseInt(localStorage.getItem('pwa_last_seen') || '0', 10);
+      const sevenDays = 7 * 24 * 60 * 60 * 1000;
+      if (hasFlag && (Date.now() - lastSeen < sevenDays)) return true;
+    }
+    return false;
+  });
 
   useEffect(() => {
     const checkInstallation = async () => {
@@ -90,28 +99,27 @@ function AppContent() {
             return;
           }
         } catch (e) {
-          console.warn("getInstalledRelatedApps not supported or blocked:", e);
+          console.warn("getInstalledRelatedApps check note:", e);
         }
       }
 
-      // 3. Browser check with time limit (handles the "deleted app" case)
+      // 3. Browser check with time limit (7 days)
       const hasFlag = localStorage.getItem('pwa_installed') === 'true';
-      const lastSeen = parseInt(localStorage.getItem('pwa_last_seen') || '0');
-      const threeDays = 3 * 24 * 60 * 60 * 1000;
+      const lastSeen = parseInt(localStorage.getItem('pwa_last_seen') || '0', 10);
+      const sevenDays = 7 * 24 * 60 * 60 * 1000;
       
-      if (hasFlag && (Date.now() - lastSeen < threeDays)) {
+      if (hasFlag && (Date.now() - lastSeen < sevenDays)) {
         setIsActuallyInstalled(true);
       } else {
-        // If it's been too long or no flag, we assume it's uninstalled or needs re-check
         setIsActuallyInstalled(false);
-        if (hasFlag) localStorage.removeItem('pwa_installed');
       }
     };
 
     checkInstallation();
   }, [isStandalone, isAndroidWebView, isCapacitorOrNative, isAndroidTWA, isUrlAppFlag]);
 
-  if (authLoading || settingsLoading || isActuallyInstalled === null) return <LoadingScreen />;
+  // Auth and settings have instant memory fallback so no screen flash
+  if (authLoading && !isActuallyInstalled) return <LoadingScreen />;
 
   const path = location.pathname;
   // Admin and Auth are allowed in browser for setup/login
