@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, where, getDocs, orderBy, deleteDoc, doc } from 'firebase/firestore';
+import { collection, query, where, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
+import { useApps } from '../context/AppsContext';
 import { GlassCard } from '../components/ui/GlassCard';
 import { Button } from '../components/ui/Button';
 import { Heart, Trash2, ExternalLink, Package } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function SavedApps() {
-  const { user, isAdmin } = useAuth();
+  const { user } = useAuth();
+  const { apps } = useApps();
   const [saved, setSaved] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -22,28 +24,31 @@ export default function SavedApps() {
         );
         const snap = await getDocs(q);
         
-        const appIds = snap.docs.map(d => d.data().appId);
-        if (appIds.length === 0) {
+        if (snap.empty) {
           setSaved([]);
           setLoading(false);
           return;
         }
 
-        const appsRef = collection(db, 'apps');
-        const appsSnap = await getDocs(query(
-          appsRef, 
-          where('__name__', 'in', appIds),
-          where('status', '==', 'published')
-        ));
-        
         const appsMap = new Map();
-        appsSnap.docs.forEach(d => appsMap.set(d.id, { id: d.id, ...d.data() }));
+        apps.forEach(a => appsMap.set(a.id, a));
 
-        setSaved(snap.docs.map(d => ({
-          id: d.id,
-          app: appsMap.get(d.data().appId),
-          ...d.data()
-        })).filter(s => s.app)); 
+        setSaved(snap.docs.map(d => {
+          const data = d.data();
+          const localApp = appsMap.get(data.appId) || {
+            id: data.appId,
+            name: data.appName || 'Unknown App',
+            mainImage: data.appImage || '',
+            category: data.category || 'General',
+            rating: data.rating || 4.5,
+            itemType: data.itemType || 'app'
+          };
+          return {
+            id: d.id,
+            app: localApp,
+            ...data
+          };
+        }));
 
       } catch (error) {
         console.error("Error fetching saved apps:", error);
@@ -52,7 +57,7 @@ export default function SavedApps() {
       }
     }
     fetchSaved();
-  }, [user]);
+  }, [user, apps]);
 
   const removeSaved = async (id: string) => {
     try {
@@ -68,64 +73,70 @@ export default function SavedApps() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="space-y-1">
           <h1 className="text-3xl font-black text-gray-900">Saved Applications</h1>
-          <p className="text-gray-500 font-medium">Quickly access apps you've bookmarked for later.</p>
+          <p className="text-gray-500 font-medium">Quick access to your bookmarked and favorite tools</p>
         </div>
-        {isAdmin && (
-          <Link to="/admin/saved">
-            <Button variant="outline" size="sm" className="rounded-xl border-purple-200 text-purple-700 bg-purple-50 hover:bg-purple-100 font-black text-xs gap-1.5 shadow-2xs">
-              ⚡ Open Admin Saved Manager
-            </Button>
-          </Link>
-        )}
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          {[1,2,3,4].map(i => (
-            <div key={i} className="h-32 bg-gray-200 rounded-[32px] animate-pulse" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[1, 2, 3, 4].map(n => (
+            <div key={n} className="h-28 bg-gray-100 rounded-2xl animate-pulse" />
           ))}
         </div>
-      ) : saved.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          {saved.map((item) => (
-            <GlassCard key={item.id} className="p-4 flex gap-4 items-center group">
-              <div className="w-20 h-20 rounded-2xl overflow-hidden bg-gray-50 flex-shrink-0">
-                <img src={item.app.mainImage} alt={item.app.name} className="w-full h-full object-cover" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-bold text-gray-900 truncate">{item.app.name}</h3>
-                <p className="text-xs text-gray-400 font-medium">{item.app.category}</p>
-                <div className="flex gap-2 mt-3">
-                  <Link to={`/apps/${item.app.id}`} className="flex-1">
-                    <Button variant="outline" size="sm" className="w-full text-[10px] h-8 rounded-lg border-blue-100 text-blue-600 font-black uppercase">
-                      View
-                    </Button>
-                  </Link>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="w-8 h-8 rounded-lg text-red-400 hover:text-red-500 hover:bg-red-50"
-                    onClick={() => removeSaved(item.id)}
-                  >
-                    <Trash2 size={16} />
-                  </Button>
+      ) : saved.length === 0 ? (
+        <GlassCard className="text-center py-16 space-y-4">
+          <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto">
+            <Heart size={32} />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-xl font-bold text-gray-900">No saved applications</h3>
+            <p className="text-gray-500 max-w-sm mx-auto">
+              Save your favorite apps and tools to easily find and download them later.
+            </p>
+          </div>
+          <Link to="/explore">
+            <Button variant="primary">Explore Apps</Button>
+          </Link>
+        </GlassCard>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {saved.map(({ id, app }) => (
+            <GlassCard key={id} className="flex items-center justify-between p-4 group hover:shadow-md transition-shadow">
+              <div className="flex items-center gap-4">
+                <img 
+                  src={app.mainImage || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=150&q=80'} 
+                  alt={app.name} 
+                  className="w-16 h-16 rounded-2xl object-cover border border-gray-100 shadow-xs"
+                />
+                <div>
+                  <h3 className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
+                    {app.name}
+                  </h3>
+                  <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 mt-1">
+                    <span className="capitalize">{app.category || 'General'}</span>
+                    <span>•</span>
+                    <span>★ {app.rating || '4.5'}</span>
+                  </div>
                 </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Link to={`/apps/${app.id}`}>
+                  <Button size="sm" variant="ghost" className="h-9 w-9 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50">
+                    <ExternalLink size={18} />
+                  </Button>
+                </Link>
+                <Button 
+                  size="sm" 
+                  variant="ghost" 
+                  onClick={() => removeSaved(id)}
+                  className="h-9 w-9 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50"
+                >
+                  <Trash2 size={18} />
+                </Button>
               </div>
             </GlassCard>
           ))}
-        </div>
-      ) : (
-        <div className="py-20 text-center space-y-6">
-           <div className="w-24 h-24 bg-pink-50 rounded-full flex items-center justify-center mx-auto text-pink-300">
-             <Heart size={48} fill="currentColor" />
-           </div>
-           <div className="space-y-2">
-             <h3 className="text-xl font-bold text-gray-900">Your Wishlist is Empty</h3>
-             <p className="text-gray-500 max-w-xs mx-auto">Save applications you like and find them easily when you're ready to download.</p>
-           </div>
-           <Link to="/explore">
-             <Button variant="gradient">Discover Apps</Button>
-           </Link>
         </div>
       )}
     </div>

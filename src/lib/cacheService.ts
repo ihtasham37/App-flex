@@ -1,31 +1,35 @@
 /**
  * APPFLEX Ultra-Fast Lifetime Cache Engine
- * Utilizes IndexedDB as primary high-capacity permanent storage (100MB+)
- * with LocalStorage as immediate synchronous fallback for 0ms initial render.
+ * High-capacity IndexedDB storage (500MB+) with synchronous manifest indexing.
  * 
- * Features:
- * - Permanent Lifetime Persistence (No 24h or daily expiry)
- * - 0 Firestore reads on repeated visits
- * - Delta Sync support (fetches only newly added/updated items)
+ * Guarantees:
+ * - 0 Firestore reads on all repeated visits
+ * - Permanent lifetime persistence (never expires across browser restarts or days)
+ * - Safe against LocalStorage 5MB quota errors
  */
 
-const DB_NAME = 'appflex_lifetime_db_v2';
+const DB_NAME = 'appflex_lifetime_db_v3';
 const STORE_NAME = 'appflex_cache_store';
 const DB_VERSION = 1;
 
 export const CACHE_KEYS = {
-  APPS: 'appflex_cache_apps_v2',
-  CATEGORIES: 'appflex_cache_categories_v2',
-  SETTINGS: 'appflex_cache_settings_v2',
-  ADS: 'appflex_cache_ads_v2',
-  CATALOG_VERSION: 'appflex_catalog_version_v2',
-  LAST_SYNC_TIME: 'appflex_last_sync_time_v2',
-  CLIENT_CODE_VERSION: 'appflex_client_code_version_v2',
+  APPS: 'appflex_cache_apps_v3',
+  CATEGORIES: 'appflex_cache_categories_v3',
+  SETTINGS: 'appflex_cache_settings_v3',
+  ADS: 'appflex_cache_ads_v3',
+  CATALOG_VERSION: 'appflex_catalog_version_v3',
+  LAST_SYNC_TIME: 'appflex_last_sync_time_v3',
+  CLIENT_CODE_VERSION: 'appflex_client_code_version_v3',
+  CATALOG_MANIFEST: 'appflex_catalog_manifest_v3',
 };
 
-// Open or create IndexedDB instance
+// Singleton DB connection promise
+let dbPromise: Promise<IDBDatabase> | null = null;
+
 function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
+  if (dbPromise) return dbPromise;
+
+  dbPromise = new Promise((resolve, reject) => {
     if (typeof window === 'undefined' || !window.indexedDB) {
       reject(new Error('IndexedDB not supported'));
       return;
@@ -38,8 +42,13 @@ function openDB(): Promise<IDBDatabase> {
       }
     };
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+    request.onerror = (err) => {
+      dbPromise = null;
+      reject(err);
+    };
   });
+
+  return dbPromise;
 }
 
 // Low-level IndexedDB Helpers
@@ -53,7 +62,8 @@ async function idbGet<T>(key: string): Promise<T | null> {
       req.onsuccess = () => resolve(req.result ?? null);
       req.onerror = () => resolve(null);
     });
-  } catch {
+  } catch (err) {
+    console.warn(`[CacheEngine] IndexedDB get error for "${key}":`, err);
     return null;
   }
 }
@@ -61,15 +71,15 @@ async function idbGet<T>(key: string): Promise<T | null> {
 async function idbSet<T>(key: string, value: T): Promise<void> {
   try {
     const db = await openDB();
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
-      store.put(value, key);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => resolve();
+      const req = store.put(value, key);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
     });
   } catch (e) {
-    console.warn(`[CacheEngine] IndexedDB set error for ${key}:`, e);
+    console.warn(`[CacheEngine] IndexedDB set error for "${key}":`, e);
   }
 }
 
@@ -114,18 +124,31 @@ function getLocalSync<T>(key: string): T | null {
   }
 }
 
+function setLocalSync<T>(key: string, data: T): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const envelope = {
+      permanent: true,
+      savedAt: Date.now(),
+      data,
+    };
+    localStorage.setItem(key, JSON.stringify(envelope));
+  } catch {
+    // LocalStorage quota reached, safely ignored as IndexedDB holds data
+  }
+}
+
 export const cacheService = {
   /**
-   * Synchronous get from LocalStorage for instant 0ms app start.
-   * Lifetime persistence: Never expires based on date or time.
+   * Synchronous get from LocalStorage for tiny configs (manifest, settings, ads).
    */
   get<T>(key: string): T | null {
     return getLocalSync<T>(key);
   },
 
   /**
-   * Async get from high-capacity IndexedDB (with fallback to localStorage).
-   * Lifetime permanent store.
+   * Async get from high-capacity IndexedDB with fallback to LocalStorage.
+   * Supports massive datasets (100MB+).
    */
   async getAsync<T>(key: string): Promise<T | null> {
     const idbValue = await idbGet<T>(key);
@@ -134,44 +157,35 @@ export const cacheService = {
   },
 
   /**
-   * Saves data permanently to both IndexedDB and LocalStorage.
-   * Guarantees lifetime persistence across browser restarts, days, months, and years.
+   * Saves data permanently to IndexedDB and mirrors lightweight objects in LocalStorage.
    */
-  set<T>(key: string, data: T): void {
+  async set<T>(key: string, data: T): Promise<void> {
     if (typeof window === 'undefined') return;
 
-    // 1. Permanent IndexedDB Save (Handles large 50MB+ datasets)
-    idbSet(key, data);
+    // 1. Permanent IndexedDB Save (Handles massive datasets)
+    await idbSet(key, data);
 
-    // 2. Synchronous LocalStorage Mirror for instant startup
-    try {
-      const envelope = {
-        permanent: true,
-        savedAt: Date.now(),
-        data,
-      };
-      localStorage.setItem(key, JSON.stringify(envelope));
-    } catch (e) {
-      // If localStorage is full, IndexedDB will still securely hold the full dataset
-      console.warn(`[CacheEngine] LocalStorage quota reached, IndexedDB used for "${key}"`);
+    // 2. LocalStorage mirror for small scalar/object types (like versions, settings)
+    if (key !== CACHE_KEYS.APPS) {
+      setLocalSync(key, data);
     }
   },
 
   /**
    * Remove a specific key from both storage layers.
    */
-  remove(key: string): void {
+  async remove(key: string): Promise<void> {
     if (typeof window === 'undefined') return;
     try {
       localStorage.removeItem(key);
-      idbDelete(key);
+      await idbDelete(key);
     } catch {}
   },
 
   /**
-   * Purges all APPFLEX cache. Used when admin initiates full sync.
+   * Purges all APPFLEX cache.
    */
-  clearAll(): void {
+  async clearAll(): Promise<void> {
     if (typeof window === 'undefined') return;
     try {
       Object.values(CACHE_KEYS).forEach((k) => {
@@ -179,7 +193,7 @@ export const cacheService = {
           localStorage.removeItem(k);
         } catch {}
       });
-      idbClear();
+      await idbClear();
     } catch (e) {
       console.warn('[CacheEngine] Clear all error:', e);
     }

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { collection, getDocs, doc, getDoc, query, where, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { cacheService, CACHE_KEYS } from '../lib/cacheService';
 import { useSettings } from './SettingsContext';
@@ -49,186 +49,121 @@ const AppsContext = createContext<AppsContextType | undefined>(undefined);
 export const AppsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { settings } = useSettings();
 
-  // Load from synchronous lifetime storage first for instant 0ms startup
-  const [apps, setApps] = useState<AppItemData[]>(() => {
-    return cacheService.get<AppItemData[]>(CACHE_KEYS.APPS) || [];
-  });
-
-  const [categories, setCategories] = useState<CategoryData[]>(() => {
-    return cacheService.get<CategoryData[]>(CACHE_KEYS.CATEGORIES) || [];
-  });
-
-  const [loading, setLoading] = useState<boolean>(() => {
-    const cached = cacheService.get<AppItemData[]>(CACHE_KEYS.APPS);
-    return !cached || cached.length === 0;
-  });
+  const [apps, setApps] = useState<AppItemData[]>([]);
+  const [categories, setCategories] = useState<CategoryData[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
 
   // Keep stable refs to avoid recreating fetchCatalog and triggering re-render loops
-  const appsRef = useRef<AppItemData[]>(apps);
-  appsRef.current = apps;
+  const appsRef = useRef<AppItemData[]>([]);
+  const categoriesRef = useRef<CategoryData[]>([]);
+  const isSyncingRef = useRef<boolean>(false);
+  const initialHydrationDoneRef = useRef<boolean>(false);
 
-  const categoriesRef = useRef<CategoryData[]>(categories);
+  // Synchronize refs with state
+  appsRef.current = apps;
   categoriesRef.current = categories;
 
-  const isSyncingRef = useRef<boolean>(false);
-
-  // Hydrate from high-capacity IndexedDB on mount (ensures large 50MB+ datasets load fully)
-  useEffect(() => {
-    let isMounted = true;
-    (async () => {
-      try {
-        const idbApps = await cacheService.getAsync<AppItemData[]>(CACHE_KEYS.APPS);
-        const idbCats = await cacheService.getAsync<CategoryData[]>(CACHE_KEYS.CATEGORIES);
-        if (isMounted && idbApps && idbApps.length > 0) {
-          setApps(idbApps);
-          if (idbCats && idbCats.length > 0) setCategories(idbCats);
-          setLoading(false);
-        }
-      } catch (err) {
-        console.warn('[AppsProvider] IndexedDB initial hydration note:', err);
-      }
-    })();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const fetchCatalog = useCallback(async (force = false) => {
+  const fetchCatalogFromFirestore = useCallback(async (currentLocalApps: AppItemData[], currentLocalCats: CategoryData[]) => {
     if (isSyncingRef.current) return;
     isSyncingRef.current = true;
 
-    // 1. Retrieve current lifetime cached apps
-    const currentApps = appsRef.current.length > 0 
-      ? appsRef.current 
-      : (await cacheService.getAsync<AppItemData[]>(CACHE_KEYS.APPS)) || [];
-    
-    const currentCats = categoriesRef.current.length > 0 
-      ? categoriesRef.current 
-      : (await cacheService.getAsync<CategoryData[]>(CACHE_KEYS.CATEGORIES)) || [];
-      
-    const cachedVer = cacheService.get<number>(CACHE_KEYS.CATALOG_VERSION);
-    const syncTime = cacheService.get<number>(CACHE_KEYS.LAST_SYNC_TIME) || 0;
-
-    // SMART LIFETIME ZERO-READ PATH:
-    // If we have cached apps and catalogVersion hasn't changed on server, DO NOT QUERY FIRESTORE!
-    // Result: 0 Reads used on all repeated visits & 0 lag.
-    if (!force && 
-        settings.catalogVersion !== undefined && 
-        cachedVer === settings.catalogVersion && 
-        currentApps.length > 0) {
-      setApps(currentApps);
-      setCategories(currentCats);
-      setLoading(false);
-      isSyncingRef.current = false;
-      return;
-    }
-
     try {
-      // Determine whether we do a full initial fetch or a targeted Delta sync
-      const isFullFetch = force || currentApps.length === 0 || syncTime === 0;
-      console.log(`[AppsProvider] Running ${isFullFetch ? 'Full' : 'Delta'} sync (Server v${settings.catalogVersion || 1} vs Local v${cachedVer || 0})...`);
+      console.log(`[AppsProvider] Fetching catalog from Firestore (Server v${settings.catalogVersion || 1})...`);
 
-      let appsSnap;
-      let catsSnap;
+      const [appsSnap, catsSnap] = await Promise.all([
+        getDocs(collection(db, 'apps')),
+        getDocs(collection(db, 'categories'))
+      ]);
 
-      if (isFullFetch) {
-        // Full Fetch Path (Only on very first install / visit)
-        [appsSnap, catsSnap] = await Promise.all([
-          getDocs(collection(db, 'apps')),
-          getDocs(collection(db, 'categories'))
-        ]);
-      } else {
-        // Targeted Delta Sync: Fetch ONLY items created or updated since last sync!
-        // This consumes ONLY 1 read per newly added app!
-        const lastTimestamp = Timestamp.fromMillis(syncTime);
-        const appsQuery = query(collection(db, 'apps'), where('updatedAt', '>', lastTimestamp));
-        const catsQuery = query(collection(db, 'categories'), where('updatedAt', '>', lastTimestamp));
+      const fetchedApps: AppItemData[] = appsSnap.docs
+        .map(d => ({ id: d.id, ...d.data() } as AppItemData))
+        .filter(item => !item.status || item.status === 'published');
 
-        [appsSnap, catsSnap] = await Promise.all([
-          getDocs(appsQuery),
-          getDocs(catsQuery)
-        ]);
-      }
+      const fetchedCats: CategoryData[] = catsSnap.docs
+        .map(d => ({ id: d.id, ...d.data() } as CategoryData));
 
-      // Process Incoming Apps
-      const incomingApps = appsSnap.docs.map(d => ({ id: d.id, ...d.data() } as AppItemData));
-      let mergedApps = isFullFetch ? incomingApps : [...currentApps];
-
-      if (!isFullFetch && incomingApps.length > 0) {
-        // Merge newly added or edited apps into our permanent dataset
-        incomingApps.forEach(newApp => {
-          const idx = mergedApps.findIndex(a => a.id === newApp.id);
-          if (idx > -1) {
-            mergedApps[idx] = newApp;
-          } else {
-            mergedApps.unshift(newApp);
-          }
-        });
-      }
-
-      // Filter published apps for public views
-      const finalApps = mergedApps.filter(item => !item.status || item.status === 'published');
-
-      // Process Incoming Categories
-      const incomingCats = catsSnap.docs.map(d => ({ id: d.id, ...d.data() } as CategoryData));
-      let mergedCats = isFullFetch ? incomingCats : [...currentCats];
-      
-      if (!isFullFetch && incomingCats.length > 0) {
-        incomingCats.forEach(newCat => {
-          const idx = mergedCats.findIndex(c => c.id === newCat.id);
-          if (idx > -1) {
-            mergedCats[idx] = newCat;
-          } else {
-            mergedCats.push(newCat);
-          }
-        });
-      }
-
-      // Update In-Memory State
-      setApps(finalApps);
-      setCategories(mergedCats);
-
-      // Save Permanently to Lifetime Storage (IndexedDB + LocalStorage)
-      if (finalApps.length > 0 || isFullFetch) {
-        cacheService.set(CACHE_KEYS.APPS, finalApps);
-        cacheService.set(CACHE_KEYS.CATEGORIES, mergedCats);
-        
-        const now = Date.now();
-        cacheService.set(CACHE_KEYS.LAST_SYNC_TIME, now);
-
-        if (settings.catalogVersion !== undefined) {
-          cacheService.set(CACHE_KEYS.CATALOG_VERSION, settings.catalogVersion);
-        }
-      }
-
-      console.log(`[AppsProvider] Lifetime sync complete. ${finalApps.length} total items permanently cached.`);
-    } catch (err) {
-      console.error('[AppsProvider] Sync error, using lifetime cache:', err);
-      // Fallback cleanly to permanent cache
-      if (currentApps.length > 0) {
-        setApps(currentApps);
-        setCategories(currentCats);
-      }
-    } finally {
+      // Update state
+      setApps(fetchedApps);
+      setCategories(fetchedCats);
       setLoading(false);
+
+      // Save Permanently to Lifetime IndexedDB
+      await Promise.all([
+        cacheService.set(CACHE_KEYS.APPS, fetchedApps),
+        cacheService.set(CACHE_KEYS.CATEGORIES, fetchedCats),
+        cacheService.set(CACHE_KEYS.CATALOG_VERSION, settings.catalogVersion || 1),
+        cacheService.set(CACHE_KEYS.LAST_SYNC_TIME, Date.now())
+      ]);
+
+      console.log(`[AppsProvider] Lifetime cache saved: ${fetchedApps.length} apps, ${fetchedCats.length} categories.`);
+    } catch (err) {
+      console.error('[AppsProvider] Firestore catalog fetch error, fallback to local cache:', err);
+      if (currentLocalApps.length > 0) {
+        setApps(currentLocalApps);
+        setCategories(currentLocalCats);
+      }
+      setLoading(false);
+    } finally {
       isSyncingRef.current = false;
     }
   }, [settings.catalogVersion]);
 
+  // Primary Hydration & Zero-Read Check
   useEffect(() => {
-    if (settings.catalogVersion !== undefined) {
-      fetchCatalog(false);
+    let isMounted = true;
+
+    async function initCatalog() {
+      try {
+        // 1. Read IndexedDB lifetime storage
+        const [cachedApps, cachedCats, cachedVer] = await Promise.all([
+          cacheService.getAsync<AppItemData[]>(CACHE_KEYS.APPS),
+          cacheService.getAsync<CategoryData[]>(CACHE_KEYS.CATEGORIES),
+          cacheService.getAsync<number>(CACHE_KEYS.CATALOG_VERSION)
+        ]);
+
+        if (!isMounted) return;
+
+        const hasCachedApps = cachedApps && cachedApps.length > 0;
+        const currentServerVersion = settings.catalogVersion || 1;
+        const localVersion = cachedVer || 0;
+
+        if (hasCachedApps) {
+          // Immediately populate UI with 0ms latency
+          setApps(cachedApps);
+          if (cachedCats && cachedCats.length > 0) setCategories(cachedCats);
+          setLoading(false);
+          initialHydrationDoneRef.current = true;
+
+          // ZERO FIRESTORE READS PATH:
+          // If local version matches server version, STOP HERE! No Firestore calls!
+          if (localVersion >= currentServerVersion) {
+            console.log(`[AppsProvider] Zero-Read Lifetime Cache Active: v${localVersion} (No Firestore calls made)`);
+            return;
+          }
+        }
+
+        // Only fetch if no local apps exist OR server has newer catalogVersion
+        await fetchCatalogFromFirestore(cachedApps || [], cachedCats || []);
+      } catch (err) {
+        console.warn('[AppsProvider] Catalog initialization note:', err);
+        setLoading(false);
+      }
     }
-  }, [fetchCatalog, settings.catalogVersion]);
+
+    initCatalog();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [fetchCatalogFromFirestore, settings.catalogVersion]);
 
   const refreshApps = async (force = true) => {
     if (force) {
-      cacheService.remove(CACHE_KEYS.APPS);
-      cacheService.remove(CACHE_KEYS.CATEGORIES);
-      cacheService.remove(CACHE_KEYS.LAST_SYNC_TIME);
-      cacheService.remove(CACHE_KEYS.CATALOG_VERSION);
+      await cacheService.remove(CACHE_KEYS.APPS);
+      await cacheService.remove(CACHE_KEYS.CATEGORIES);
+      await cacheService.remove(CACHE_KEYS.CATALOG_VERSION);
     }
-    await fetchCatalog(force);
+    await fetchCatalogFromFirestore([], []);
   };
 
   const getCategoryName = useCallback((catIdOrName?: string): string => {
@@ -241,10 +176,10 @@ export const AppsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const getAppById = async (id: string): Promise<AppItemData | null> => {
     // 1. Check in-memory state (0 reads)
-    const found = appsRef.current.find(a => a.id === id);
-    if (found) return found;
+    const inMem = appsRef.current.find(a => a.id === id);
+    if (inMem) return inMem;
 
-    // 2. Check lifetime storage (0 reads)
+    // 2. Check IndexedDB lifetime storage (0 reads)
     const cached = await cacheService.getAsync<AppItemData[]>(CACHE_KEYS.APPS);
     if (cached) {
       const cachedFound = cached.find(a => a.id === id);
