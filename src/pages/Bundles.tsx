@@ -16,10 +16,6 @@ export default function Bundles() {
   const [allItems, setAllItems] = useState<any[]>([]);
   const [pageVisitId] = useState(() => Math.random().toString(36).substring(2, 9));
 
-  // Derive unique categories for sidebar
-  const allCategories = Array.from(new Set(allItems.map(i => i.category).filter(Boolean)));
-  const trendingApps = allItems.filter(i => !i.itemType || i.itemType === 'app').slice(0, 5);
-
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -29,46 +25,71 @@ export default function Bundles() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  const shuffle = <T,>(array: T[]): T[] => {
-    const newArr = [...array];
-    for (let i = newArr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
-    }
-    return newArr;
-  };
-
   useEffect(() => {
     if (!apps) return;
     const items = (apps as any[]).filter(i => !i.status || i.status === 'published');
-    setAllItems(shuffle(items));
+    
+    // Sort items by date (newest first) instead of shuffling
+    const sortedItems = [...items].sort((a, b) => {
+      const dateA = a.updatedAt?.seconds || a.createdAt?.seconds || 0;
+      const dateB = b.updatedAt?.seconds || b.createdAt?.seconds || 0;
+      return dateB - dateA;
+    });
+    
+    setAllItems(sortedItems);
     
     // STRICT filter: ONLY items that are bundles
-    const bundleItems = items.filter(isBundleItem);
+    const bundleItems = sortedItems.filter(isBundleItem);
     setBundles(bundleItems);
   }, [apps]);
 
-  useEffect(() => {
-    if (!dbCategories) return;
-    const catList = dbCategories
-      .filter(c => c.itemType === 'bundle' || (c as any).mainType === 'bundle')
-      .map(c => c.name);
-    
-    setCategories(['All', ...Array.from(new Set(catList))]);
-  }, [dbCategories]);
-
   const loading = appsLoading && bundles.length === 0;
 
-  // Group bundles by category
+  // Category name resolver that handles both category ID and category Name
+  const getCategoryName = (catIdOrName: string) => {
+    if (!catIdOrName) return 'General';
+    const found = dbCategories?.find(
+      c => c.id === catIdOrName || c.name.toLowerCase() === catIdOrName.toLowerCase()
+    );
+    return found ? found.name : catIdOrName;
+  };
+
+  // Derive unique categories for sidebar
+  const allCategories = Array.from(new Set(allItems.map(i => getCategoryName(i.category)).filter(Boolean)));
+  const trendingApps = allItems.filter(i => !i.itemType || i.itemType === 'app').slice(0, 5);
+
+  // Group bundles by resolved category NAME for UI display
   const groupedBundles: { [key: string]: any[] } = {};
   bundles.forEach(bundle => {
-    const cat = bundle.category || 'General';
-    if (!groupedBundles[cat]) groupedBundles[cat] = [];
-    groupedBundles[cat].push(bundle);
+    const catName = getCategoryName(bundle.category);
+    if (!groupedBundles[catName]) groupedBundles[catName] = [];
+    groupedBundles[catName].push(bundle);
   });
 
-  // Randomize category order on the page
-  const allCatNames = shuffle(Object.keys(groupedBundles));
+  // Extract category pills from database and grouped items
+  useEffect(() => {
+    const itemCats = Object.keys(groupedBundles);
+    const dbCats = (dbCategories || [])
+      .filter(c => c.itemType === 'bundle' || (c as any).mainType === 'bundle')
+      .map(c => c.name);
+    const uniqueCats = Array.from(new Set([...dbCats, ...itemCats])).filter(Boolean);
+    
+    // Sort pills: All, AI REELS, then others
+    const sortedPills = uniqueCats.sort((a, b) => {
+      if (a.toLowerCase() === 'ai reels') return -1;
+      if (b.toLowerCase() === 'ai reels') return 1;
+      return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+    });
+    
+    setCategories(['All', ...sortedPills]);
+  }, [dbCategories, bundles]);
+
+  // Category display order: AI REELS first, then BUNDLE 1, 2, 3...
+  const allCatNames = Object.keys(groupedBundles).sort((a, b) => {
+    if (a.toLowerCase() === 'ai reels') return -1;
+    if (b.toLowerCase() === 'ai reels') return 1;
+    return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+  });
 
   // Helper to split array into chunks of N items (1 line = 4 items on desktop)
   const chunkArray = <T,>(arr: T[], size: number): T[][] => {
@@ -80,46 +101,52 @@ export default function Bundles() {
   };
 
   // Render a single bundle card
-  const renderSingleCard = (bundle: any) => (
-    <Link 
-      key={bundle.id} 
-      to={`/apps/${bundle.id}`} 
-      className="group block"
-    >
-      {/* Wide Landscape Card Box */}
-      <div className="p-2.5 sm:p-2.5 bg-white rounded-2xl border border-slate-200/90 hover:border-purple-400 shadow-xs hover:shadow-lg transition-all flex items-center gap-3 sm:gap-3 h-[76px] sm:h-[82px] text-left">
-        
-        {/* Left Image Thumbnail */}
-        <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-xl overflow-hidden bg-slate-100 border border-slate-100 shrink-0 shadow-xs">
-          <img 
-            src={bundle.mainImage} 
-            alt={bundle.name} 
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
-          />
-        </div>
-        
-        {/* Right Info - Clear Title & Metadata */}
-        <div className="flex-1 min-w-0 flex flex-col justify-center space-y-0.5 sm:space-y-1">
-          <h3 className="font-black text-slate-900 text-xs sm:text-xs line-clamp-2 group-hover:text-purple-600 transition-colors uppercase leading-tight sm:leading-snug">
-            {bundle.name}
-          </h3>
+  const renderSingleCard = (bundle: any) => {
+    const imageSrc = bundle.mainImage || bundle.imageUrl || bundle.icon || 'https://i.etsystatic.com/47600983/r/il/b60acb/5881826130/il_1140xN.5881826130_3sh5.jpg';
+    return (
+      <Link 
+        key={bundle.id} 
+        to={`/apps/${bundle.id}`} 
+        className="group block"
+      >
+        {/* Wide Landscape Card Box */}
+        <div className="p-2.5 sm:p-2.5 bg-white rounded-2xl border border-slate-200/90 hover:border-purple-400 shadow-xs hover:shadow-lg transition-all flex items-center gap-3 sm:gap-3 h-[76px] sm:h-[82px] text-left">
           
-          <div className="flex items-center gap-2 text-[10px] sm:text-[10px] font-bold text-slate-400">
-            <span className="text-yellow-500 flex items-center gap-0.5 font-black">
-              <Star size={10} fill="currentColor" /> {bundle.rating || '4.8'}
-            </span>
-            {bundle.size && bundle.size.trim() !== '' && (
-              <>
-                <span>•</span>
-                <span className="uppercase text-slate-500 font-semibold truncate">{bundle.size}</span>
-              </>
-            )}
+          {/* Left Image Thumbnail */}
+          <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-xl overflow-hidden bg-slate-100 border border-slate-100 shrink-0 shadow-xs flex items-center justify-center p-0.5">
+            <img 
+              src={imageSrc} 
+              alt={bundle.name} 
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 rounded-lg" 
+              onError={(e) => {
+                (e.target as HTMLElement).setAttribute('src', 'https://i.etsystatic.com/47600983/r/il/b60acb/5881826130/il_1140xN.5881826130_3sh5.jpg');
+              }}
+            />
           </div>
-        </div>
+          
+          {/* Right Info - Clear Title & Metadata */}
+          <div className="flex-1 min-w-0 flex flex-col justify-center space-y-0.5 sm:space-y-1">
+            <h3 className="font-black text-slate-900 text-xs sm:text-xs line-clamp-2 group-hover:text-purple-600 transition-colors uppercase leading-tight sm:leading-snug">
+              {bundle.name}
+            </h3>
+            
+            <div className="flex items-center gap-2 text-[10px] sm:text-[10px] font-bold text-slate-400">
+              <span className="text-yellow-500 flex items-center gap-0.5 font-black">
+                <Star size={10} fill="currentColor" /> {bundle.rating || '4.8'}
+              </span>
+              {bundle.size && bundle.size.trim() !== '' && (
+                <>
+                  <span>•</span>
+                  <span className="uppercase text-slate-500 font-semibold truncate">{bundle.size}</span>
+                </>
+              )}
+            </div>
+          </div>
 
-      </div>
-    </Link>
-  );
+        </div>
+      </Link>
+    );
+  };
 
   // Global continuous line counter across all categories for strict 5-line ads
   let globalLineCount = 0;

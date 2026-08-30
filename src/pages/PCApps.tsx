@@ -53,23 +53,23 @@ export default function PCApps() {
     setItems(shuffle(pcItems));
   }, [apps]);
 
-  useEffect(() => {
-    if (!dbCategories) return;
-    const catList = dbCategories
-      .filter(c => c.itemType === 'pc' || (c as any).mainType === 'pc')
-      .map(c => c.name);
-    
-    setCategories(['All', ...Array.from(new Set(catList))]);
-  }, [dbCategories]);
-
   const loading = appsLoading && items.length === 0;
 
-  // Group by category for sectional display
+  // Category name resolver that handles both category ID and category Name
+  const getCategoryName = (catIdOrName: string) => {
+    if (!catIdOrName) return 'System Utilities & Recovery';
+    const found = dbCategories?.find(
+      c => c.id === catIdOrName || c.name.toLowerCase() === catIdOrName.toLowerCase()
+    );
+    return found ? found.name : catIdOrName;
+  };
+
+  // Group by resolved category name for sectional display
   const groupedItems: { [key: string]: AppData[] } = {};
   items.forEach(item => {
-    const cat = item.category || 'General';
-    if (!groupedItems[cat]) groupedItems[cat] = [];
-    groupedItems[cat].push(item);
+    const catName = getCategoryName(item.category);
+    if (!groupedItems[catName]) groupedItems[catName] = [];
+    groupedItems[catName].push(item);
   });
 
   // Randomize category order on the page
@@ -84,47 +84,63 @@ export default function PCApps() {
     return chunks;
   };
 
-  // Render a single PC card
-  const renderSingleCard = (item: AppData) => (
-    <Link 
-      key={item.id} 
-      to={`/apps/${item.id}`} 
-      className="group block"
-    >
-      {/* Wide Landscape Card Box */}
-      <div className="p-2.5 sm:p-2.5 bg-white rounded-2xl border border-slate-200/90 hover:border-cyan-500 shadow-xs hover:shadow-lg transition-all flex items-center gap-3 sm:gap-3 h-[76px] sm:h-[82px] text-left">
-        
-        {/* Left Image Thumbnail */}
-        <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-xl overflow-hidden bg-slate-100 border border-slate-100 shrink-0 shadow-xs">
-          <img 
-            src={item.mainImage} 
-            alt={item.name} 
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
-          />
-        </div>
-        
-        {/* Right Info - Clear Title & Metadata */}
-        <div className="flex-1 min-w-0 flex flex-col justify-center space-y-0.5 sm:space-y-1">
-          <h3 className="font-black text-slate-900 text-xs sm:text-xs line-clamp-2 group-hover:text-cyan-600 transition-colors uppercase leading-tight sm:leading-snug">
-            {item.name}
-          </h3>
-          
-          <div className="flex items-center gap-2 text-[10px] sm:text-[10px] font-bold text-slate-400">
-            <span className="text-yellow-500 flex items-center gap-0.5 font-black">
-              <Star size={10} fill="currentColor" /> {item.rating || '4.5'}
-            </span>
-            {item.size && item.size.trim() !== '' && (
-              <>
-                <span>•</span>
-                <span className="uppercase text-slate-500 font-semibold truncate">{item.size}</span>
-              </>
-            )}
-          </div>
-        </div>
+  // Extract category pills from database and grouped items
+  useEffect(() => {
+    const itemCats = Object.keys(groupedItems);
+    const dbCats = (dbCategories || [])
+      .filter(c => c.itemType === 'pc' || (c as any).mainType === 'pc')
+      .map(c => c.name);
+    const uniqueCats = Array.from(new Set([...dbCats, ...itemCats])).filter(Boolean);
+    setCategories(['All', ...uniqueCats]);
+  }, [dbCategories, items]);
 
-      </div>
-    </Link>
-  );
+  // Render a single PC card
+  const renderSingleCard = (item: AppData) => {
+    const imageSrc = (item as any).mainImage || (item as any).imageUrl || (item as any).icon || 'https://icons.iconarchive.com/icons/custom-icon-design/office/128/application-icon.png';
+    return (
+      <Link 
+        key={item.id} 
+        to={`/apps/${item.id}`} 
+        className="group block"
+      >
+        {/* Wide Landscape Card Box */}
+        <div className="p-2.5 sm:p-2.5 bg-white rounded-2xl border border-slate-200/90 hover:border-cyan-500 shadow-xs hover:shadow-lg transition-all flex items-center gap-3 sm:gap-3 h-[76px] sm:h-[82px] text-left">
+          
+          {/* Left Image Thumbnail */}
+          <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-xl overflow-hidden bg-slate-50 border border-slate-100 shrink-0 shadow-xs flex items-center justify-center p-1">
+            <img 
+              src={imageSrc} 
+              alt={item.name} 
+              className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300" 
+              onError={(e) => {
+                (e.target as HTMLElement).setAttribute('src', 'https://icons.iconarchive.com/icons/custom-icon-design/office/128/application-icon.png');
+              }}
+            />
+          </div>
+          
+          {/* Right Info - Clear Title & Metadata */}
+          <div className="flex-1 min-w-0 flex flex-col justify-center space-y-0.5 sm:space-y-1">
+            <h3 className="font-black text-slate-900 text-xs sm:text-xs line-clamp-2 group-hover:text-cyan-600 transition-colors uppercase leading-tight sm:leading-snug">
+              {item.name}
+            </h3>
+            
+            <div className="flex items-center gap-2 text-[10px] sm:text-[10px] font-bold text-slate-400">
+              <span className="text-yellow-500 flex items-center gap-0.5 font-black">
+                <Star size={10} fill="currentColor" /> {item.rating || '4.8'}
+              </span>
+              {item.size && item.size.trim() !== '' && (
+                <>
+                  <span>•</span>
+                  <span className="uppercase text-slate-500 font-semibold truncate">{item.size}</span>
+                </>
+              )}
+            </div>
+          </div>
+
+        </div>
+      </Link>
+    );
+  };
 
   // Global continuous line counter across all categories for strict 5-line ads
   let globalLineCount = 0;

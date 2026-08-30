@@ -34,6 +34,7 @@ import AdminDownloads from './pages/admin/Downloads';
 import AdminSettings from './pages/admin/Settings';
 import AdminAdsCenter from './pages/admin/AdsCenter';
 import AdminCategories from './pages/admin/Categories';
+import AdminSavedApps from './pages/admin/SavedApps';
 import AdminLayout from './pages/admin/AdminLayout';
 
 function ProtectedRoute({ children, adminOnly = false }: { children: React.ReactNode, adminOnly?: boolean }) {
@@ -146,6 +147,7 @@ function AppContent() {
       {/* Admin Routes */}
       <Route path="/admin" element={<ProtectedRoute adminOnly><AdminLayout /></ProtectedRoute>}>
         <Route index element={<AdminDashboard />} />
+        <Route path="saved" element={<AdminSavedApps />} />
         <Route path="categories" element={<AdminCategories />} />
         <Route path="apps" element={<AdminApps />} />
         <Route path="apps/new" element={<AdminAddApp />} />

@@ -55,12 +55,16 @@ export default function AdminEditApp() {
         const appSnap = await getDoc(doc(db, 'apps', appId));
         if (appSnap.exists()) {
           const data = appSnap.data();
+          const rawCat = data.category || '';
+          const matchedCat = categories.find(c => c.id === rawCat || c.name?.toLowerCase().trim() === rawCat.toLowerCase().trim());
+          const resolvedCategory = matchedCat ? matchedCat.name : rawCat;
+
           setFormData({
-            itemType: data.itemType === 'pc' ? 'pc' : data.itemType === 'bundle' ? 'bundle' : (data.category?.toLowerCase().includes('pc') ? 'pc' : data.category?.toLowerCase().includes('bundle') ? 'bundle' : 'app'),
+            itemType: data.itemType === 'pc' ? 'pc' : data.itemType === 'bundle' ? 'bundle' : (resolvedCategory?.toLowerCase().includes('pc') ? 'pc' : resolvedCategory?.toLowerCase().includes('bundle') ? 'bundle' : 'app'),
             name: data.name || '',
             appNumber: data.appNumber || '',
             developer: data.developer || '',
-            category: data.category || '',
+            category: resolvedCategory,
             version: data.version || '1.0.0',
             size: data.size || '',
             rating: data.rating?.toString() || '4.5',

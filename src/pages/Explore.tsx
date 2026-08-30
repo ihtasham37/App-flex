@@ -22,13 +22,18 @@ export default function Explore() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeCategory = searchParams.get('category') || 'All';
 
-  const { apps, loading: appsLoading } = useApps();
+  const { apps, categories: dbCategories, loading: appsLoading } = useApps();
   const [allItems, setAllItems] = useState<AppData[]>([]);
   const [pageVisitId] = useState(() => Math.random().toString(36).substring(2, 9));
 
-  // Derive unique categories for sidebar
-  const allCategories: string[] = Array.from(new Set(allItems.map(i => i.category).filter(Boolean)));
-  const trendingApps = allItems.filter(isAppItem).slice(0, 5);
+  // Category name resolver that handles both category ID and category Name
+  const getCategoryName = (catIdOrName: string) => {
+    if (!catIdOrName) return 'General';
+    const found = dbCategories?.find(
+      c => c.id === catIdOrName || c.name.toLowerCase() === catIdOrName.toLowerCase()
+    );
+    return found ? found.name : catIdOrName;
+  };
 
   const shuffle = <T,>(array: T[]): T[] => {
     const newArr = [...array];
@@ -47,8 +52,14 @@ export default function Explore() {
 
   const currentTypeItems = allItems.filter(isAppItem);
 
-  const dynamicCategories: string[] = Array.from(new Set(currentTypeItems.map(i => i.category).filter(Boolean)));
+  const dynamicCategories: string[] = Array.from(
+    new Set(currentTypeItems.map(i => getCategoryName(i.category)).filter(Boolean))
+  );
   const availableCategories: string[] = ['All', ...dynamicCategories];
+
+  // Derive unique categories for sidebar
+  const allCategories: string[] = dynamicCategories;
+  const trendingApps = currentTypeItems.slice(0, 5);
 
   const handleCategorySelect = (cat: string) => {
     const newParams = new URLSearchParams(searchParams);
@@ -62,20 +73,22 @@ export default function Explore() {
 
   const loading = appsLoading && currentTypeItems.length === 0;
 
-  // Group all items by category
+  // Group all items by resolved category name
   const categorizedGroups: { [key: string]: AppData[] } = {};
   currentTypeItems.forEach(item => {
-    const cat = item.category || 'General';
+    const cat = getCategoryName(item.category);
     if (!categorizedGroups[cat]) categorizedGroups[cat] = [];
     categorizedGroups[cat].push(item);
   });
 
-  // Randomize category display order across the page
-  const catNames: string[] = shuffle(Object.keys(categorizedGroups));
+  // Category display order
+  const catNames: string[] = Object.keys(categorizedGroups).sort((a, b) => 
+    a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+  );
 
   const singleCategoryItems: AppData[] = activeCategory === 'All' 
     ? [] 
-    : currentTypeItems.filter(i => i.category?.toLowerCase() === activeCategory.toLowerCase());
+    : currentTypeItems.filter(i => getCategoryName(i.category).toLowerCase() === activeCategory.toLowerCase());
 
   // Helper to split array into chunks of N items (1 line = 4 items)
   const chunkArray = <T,>(arr: T[], size: number): T[][] => {

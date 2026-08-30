@@ -2,53 +2,63 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
+    // Helper functions
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function isAdmin() {
-      return isSignedIn() && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
     }
 
-    // Apps Catalog - Publicly readable by ALL visitors (authenticated or unauthenticated)
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'aliihtasham10@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    // Apps Catalog (Android APKs, PC Software, Reels Bundles) - Publicly readable
     match /apps/{appId} {
       allow read: if true;
       allow create, update, delete: if isAdmin();
     }
 
-    // Categories - Publicly readable by ALL visitors
+    // Categories Catalog - Publicly readable
     match /categories/{categoryId} {
       allow read: if true;
       allow create, update, delete: if isAdmin();
     }
 
-    // Users Collection
+    // Users Collection - Profiles & RBAC
     match /users/{userId} {
       allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      allow write: if isSignedIn() && request.auth.uid == userId;
-      allow create, update, delete: if isAdmin();
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow delete: if isAdmin();
     }
 
-    // Saved Apps Bookmarks
+    // Saved Apps & Bookmarks (Personal user saves + Admin saved quick-manager)
     match /saved_apps/{savedId} {
-      allow read, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow read, write: if isAdmin();
+      allow update: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
     }
 
     // Downloads Logs
     match /downloads/{downloadId} {
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow write: if isAdmin();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
     }
 
-    // Global Settings
+    // Global Settings & Ads Center
     match /settings/{settingId} {
       allow read: if true;
       allow write: if isAdmin();
     }
   }
 }
+

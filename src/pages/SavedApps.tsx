@@ -8,7 +8,7 @@ import { Heart, Trash2, ExternalLink, Package } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function SavedApps() {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [saved, setSaved] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -65,9 +65,18 @@ export default function SavedApps() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
-      <div className="space-y-1">
-        <h1 className="text-3xl font-black text-gray-900">Saved Applications</h1>
-        <p className="text-gray-500 font-medium">Quickly access apps you've bookmarked for later.</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-black text-gray-900">Saved Applications</h1>
+          <p className="text-gray-500 font-medium">Quickly access apps you've bookmarked for later.</p>
+        </div>
+        {isAdmin && (
+          <Link to="/admin/saved">
+            <Button variant="outline" size="sm" className="rounded-xl border-purple-200 text-purple-700 bg-purple-50 hover:bg-purple-100 font-black text-xs gap-1.5 shadow-2xs">
+              ⚡ Open Admin Saved Manager
+            </Button>
+          </Link>
+        )}
       </div>
 
       {loading ? (

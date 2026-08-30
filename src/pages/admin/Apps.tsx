@@ -14,11 +14,19 @@ import { cacheService } from '../../lib/cacheService';
 
 export default function AdminApps() {
   const [items, setItems] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'app' | 'bundle' | 'pc'>('all');
 
   useEffect(() => {
+    // Fetch categories for name mapping
+    const fetchCats = async () => {
+      const snap = await getDocs(collection(db, 'categories'));
+      setCategories(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    };
+    fetchCats();
+
     // Real-time live catalog listener
     const unsub = onSnapshot(collection(db, 'apps'), (snap) => {
       setItems(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -30,6 +38,12 @@ export default function AdminApps() {
 
     return () => unsub();
   }, []);
+
+  const getCategoryName = (catId: string) => {
+    if (!catId) return 'General';
+    const cat = categories.find(c => c.id === catId || c.name?.toLowerCase().trim() === catId?.toLowerCase().trim());
+    return cat ? cat.name : catId;
+  };
 
   const handleDelete = async (itemId: string, name: string) => {
     if (window.confirm(`Are you sure you want to delete "${name}"? This action cannot be undone.`)) {
@@ -220,7 +234,7 @@ export default function AdminApps() {
 
                       <td className="px-6 py-4">
                         <span className="px-2.5 py-0.5 bg-slate-100 text-slate-700 rounded-md text-[10px] font-bold uppercase">
-                          {item.category || 'General'}
+                          {getCategoryName(item.category)}
                         </span>
                       </td>
 

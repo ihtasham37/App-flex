@@ -18,15 +18,16 @@ interface RelatedAppsSidebarProps {
 }
 
 export const RelatedAppsSidebar: React.FC<RelatedAppsSidebarProps> = ({ currentCategory, currentAppId }) => {
-  const { apps: allApps } = useApps();
+  const { apps: allApps, getCategoryName } = useApps();
   const [relatedApps, setRelatedApps] = useState<AppData[]>([]);
 
   useEffect(() => {
     function fetchRelated() {
+      const targetCategory = getCategoryName(currentCategory).toLowerCase().trim();
       // Use in-memory apps from AppsContext (0 reads!)
       const apps = (allApps as any[])
         .filter(app => 
-          app.category === currentCategory && 
+          getCategoryName(app.category).toLowerCase().trim() === targetCategory && 
           app.id !== currentAppId &&
           (!app.status || app.status === 'published')
         )
@@ -36,7 +37,7 @@ export const RelatedAppsSidebar: React.FC<RelatedAppsSidebarProps> = ({ currentC
     if (allApps.length > 0) {
       fetchRelated();
     }
-  }, [currentCategory, currentAppId, allApps]);
+  }, [currentCategory, currentAppId, allApps, getCategoryName]);
 
   return (
     <aside className="hidden lg:flex flex-col gap-6">
@@ -80,7 +81,7 @@ export const RelatedAppsSidebar: React.FC<RelatedAppsSidebarProps> = ({ currentC
                       <span className="text-[10px] font-black text-slate-600">{app.rating || '4.5'}</span>
                     </div>
                     <span className="text-[9px] font-bold text-slate-400 uppercase truncate">
-                      {app.category}
+                      {getCategoryName(app.category)}
                     </span>
                   </div>
                 </div>

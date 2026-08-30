@@ -8,6 +8,7 @@ export interface AppItemData {
   id: string;
   name: string;
   category: string;
+  categoryName?: string;
   icon: string;
   mainImage?: string;
   rating?: string;
@@ -29,12 +30,14 @@ export interface CategoryData {
   name: string;
   icon?: string;
   itemType?: string;
+  mainType?: string;
 }
 
 interface AppsContextType {
   apps: AppItemData[];
   categories: CategoryData[];
   loading: boolean;
+  getCategoryName: (catIdOrName?: string) => string;
   refreshApps: (force?: boolean) => Promise<void>;
   getAppById: (id: string) => Promise<AppItemData | null>;
 }
@@ -192,6 +195,14 @@ export const AppsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await fetchCatalog(force);
   };
 
+  const getCategoryName = useCallback((catIdOrName?: string): string => {
+    if (!catIdOrName) return 'General';
+    const found = categories.find(
+      c => c.id === catIdOrName || c.name?.toLowerCase().trim() === catIdOrName.toLowerCase().trim()
+    );
+    return found ? found.name : catIdOrName;
+  }, [categories]);
+
   const getAppById = async (id: string): Promise<AppItemData | null> => {
     // 1. Check in-memory state / cached list first (0 reads!)
     const found = apps.find(a => a.id === id);
@@ -217,7 +228,7 @@ export const AppsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AppsContext.Provider value={{ apps, categories, loading, refreshApps, getAppById }}>
+    <AppsContext.Provider value={{ apps, categories, loading, getCategoryName, refreshApps, getAppById }}>
       {children}
     </AppsContext.Provider>
   );

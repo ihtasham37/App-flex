@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Package, Users, 
-  LogOut, ShieldCheck, Menu, X, User, Tag, ExternalLink, Settings, Megaphone
+  LogOut, ShieldCheck, Menu, X, User, Tag, ExternalLink, Settings, Megaphone, Bookmark
 } from 'lucide-react';
 import { auth } from '../../lib/firebase';
 import { signOut } from 'firebase/auth';
@@ -23,6 +23,7 @@ export default function AdminLayout() {
 
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard (Analytics)', path: '/admin' },
+    { icon: Bookmark, label: 'Saved Items (Quick Manager)', path: '/admin/saved' },
     { icon: Tag, label: 'Create & Manage Categories', path: '/admin/categories' },
     { icon: Package, label: 'App Management', path: '/admin/apps' },
     { icon: Users, label: 'User Management', path: '/admin/users' },

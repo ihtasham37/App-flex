@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { doc, getDoc, collection, query, where, getDocs, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/Button';
 import { 
   Download, ArrowLeft, Star, Share2, 
-  Smartphone, Heart, ShieldCheck, X, Film, Monitor
+  Smartphone, Heart, ShieldCheck, X, Film, Monitor,
+  Edit3, Bookmark, ShieldAlert, Lock, LogIn
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn, isBundleItem, isPCItem } from '../lib/utils';
@@ -52,7 +53,7 @@ const RelatedItems: React.FC<RelatedItemsProps> = ({
   currentAppId, 
   pageVisitId 
 }) => {
-  const { apps: allApps } = useApps();
+  const { apps: allApps, getCategoryName } = useApps();
   const [relatedItems, setRelatedItems] = useState<AppData[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -60,10 +61,11 @@ const RelatedItems: React.FC<RelatedItemsProps> = ({
     function fetchRelated() {
       try {
         setLoading(true);
+        const targetCat = getCategoryName(currentCategory).toLowerCase().trim();
         // Use in-memory apps from AppsContext instead of Firestore query (0 reads!)
         let items = allApps
           .filter(item => 
-            item.category === currentCategory && 
+            getCategoryName(item.category).toLowerCase().trim() === targetCat && 
             item.id !== currentAppId && 
             (!item.status || item.status === 'published')
           ) as unknown as AppData[];
@@ -85,7 +87,7 @@ const RelatedItems: React.FC<RelatedItemsProps> = ({
     if (allApps.length > 0) {
       fetchRelated();
     }
-  }, [currentCategory, currentAppId, allApps]);
+  }, [currentCategory, currentAppId, allApps, getCategoryName]);
 
   if (loading) return <div className="h-20 flex items-center justify-center text-xs text-slate-400">Loading Related Items...</div>;
   if (relatedItems.length === 0) return null;
@@ -147,15 +149,14 @@ const RelatedItems: React.FC<RelatedItemsProps> = ({
   );
 }
 
-import { Link } from 'react-router-dom';
-
 export default function AppDetails() {
   const { appId } = useParams<{ appId: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const location = useLocation();
+  const { user, isAdmin } = useAuth();
   const { settings } = useSettings();
   const { isRewardedAdsEnabled, getRewardedAd } = useAds();
-  const { getAppById } = useApps();
+  const { getAppById, getCategoryName } = useApps();
   
   const [app, setApp] = useState<AppData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -242,38 +243,84 @@ export default function AppDetails() {
     }
   };
 
-  const executeDownload = async () => {
-    if (!user) {
-      navigate('/login');
-      return;
+  const [downloadTriggered, setDownloadTriggered] = useState(false);
+
+  const cleanUrl = (url?: string): string => {
+    if (!url) return '';
+    let cleaned = url.trim();
+    if (cleaned.includes('drive.googsle.com')) {
+      cleaned = cleaned.replace('drive.googsle.com', 'drive.google.com');
     }
-    if (!app) return;
+    if (!cleaned.startsWith('http://') && !cleaned.startsWith('https://')) {
+      cleaned = 'https://' + cleaned;
+    }
+    return cleaned;
+  };
+
+  const triggerDownloadAction = (url: string) => {
+    const targetUrl = cleanUrl(url);
+    if (!targetUrl) return;
+
+    setDownloadTriggered(true);
+
+    // Method 1: Hidden anchor click (bypasses most browser popup blockers)
+    try {
+      const a = document.createElement('a');
+      a.href = targetUrl;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        if (document.body.contains(a)) {
+          document.body.removeChild(a);
+        }
+      }, 500);
+    } catch {
+      // Method 2: Direct window.open
+      try {
+        window.open(targetUrl, '_blank', 'noopener,noreferrer');
+      } catch {
+        // Method 3: Direct location redirect fallback
+        window.location.assign(targetUrl);
+      }
+    }
+  };
+
+  const executeDownload = async () => {
+    if (!app || !app.downloadUrl || !user) return;
     setDownloading(true);
+
+    // 1. Immediately trigger download to retain user activation
+    triggerDownloadAction(app.downloadUrl);
+
+    // 2. Asynchronously record the download without blocking the user
     try {
       await addDoc(collection(db, 'downloads'), {
         userId: user.uid,
         appId: app.id,
         appName: app.name,
-        appNumber: app.appNumber,
-        category: app.category,
+        appNumber: app.appNumber || '',
+        category: app.category || '',
         downloadedAt: serverTimestamp()
       });
-      window.open(app.downloadUrl, '_blank');
     } catch (error) {
-      console.error("Download error:", error);
+      console.warn("Non-fatal download logging error:", error);
     } finally {
       setDownloading(false);
     }
   };
 
   const handleDownload = async () => {
-    if (!user) {
-      navigate('/login');
-      return;
-    }
     if (!app) return;
 
-    // Check daily download count for user
+    // 1. If user is not logged in / signed up, redirect to login page immediately
+    if (!user) {
+      navigate('/login', { state: { from: location } });
+      return;
+    }
+
+    // 2. Check daily download count for registered user if rewarded ads are enabled
     const hasActiveRewardedAd = isRewardedAdsEnabled() && Boolean(getRewardedAd());
     if (hasActiveRewardedAd) {
       try {
@@ -288,7 +335,7 @@ export default function AppDetails() {
       }
     }
 
-    // Direct download if within free limit or rewarded ads disabled
+    // 3. Direct secure download for registered user
     await executeDownload();
   };
 
@@ -335,30 +382,65 @@ export default function AppDetails() {
       {/* Main Column */}
       <div className="lg:col-span-8 xl:col-span-9 space-y-6">
         {/* Top Action Bar with Back & Save App */}
-        <div className="flex items-center justify-between bg-white border border-slate-200/80 rounded-xl px-4 py-2.5 shadow-xs">
-          <button 
-            onClick={() => navigate(-1)} 
-            className="flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-blue-600 transition-colors"
-          >
-            <ArrowLeft size={16} />
-            <span>Back</span>
-          </button>
-
-          {/* Action Header Buttons: Save App + Share */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-white border border-slate-200/80 rounded-xl px-4 py-2.5 shadow-xs">
           <div className="flex items-center gap-2">
+            <button 
+              onClick={() => navigate(-1)} 
+              className="flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-blue-600 transition-colors"
+            >
+              <ArrowLeft size={16} />
+              <span>Back</span>
+            </button>
+
+            {isAdmin && (
+              <span className="text-[10px] font-black uppercase tracking-wider bg-purple-100 text-purple-800 px-2 py-0.5 rounded-md border border-purple-200 ml-1">
+                Admin View
+              </span>
+            )}
+          </div>
+
+          {/* Action Header Buttons: Save App + Admin Edit + Share */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Admin Direct Edit Button */}
+            {isAdmin && (
+              <Link to={`/admin/apps/${app.id}/edit`}>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="h-8 text-xs font-bold gap-1.5 rounded-lg border-blue-200 text-blue-700 bg-blue-50/60 hover:bg-blue-100"
+                >
+                  <Edit3 size={13} />
+                  <span>Edit in Admin</span>
+                </Button>
+              </Link>
+            )}
+
+            {/* Save / Bookmark Button */}
             <button 
               onClick={handleSaveApp} 
               disabled={saving}
+              title={isAdmin ? "Save to Admin Panel Quick-List" : "Save for later"}
               className={cn(
                 "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border",
                 isSaved 
-                  ? "bg-red-50 text-red-600 border-red-200" 
+                  ? "bg-red-50 text-red-600 border-red-200 shadow-2xs" 
                   : "bg-slate-50 text-slate-700 hover:bg-slate-100 border-slate-200"
               )}
             >
               <Heart size={14} className={cn(isSaved ? "fill-red-500 text-red-500" : "text-slate-500")} />
-              <span>{isSaved ? 'Saved' : 'Save'}</span>
+              <span>{isSaved ? (isAdmin ? 'Saved in Admin' : 'Saved') : (isAdmin ? 'Save to Admin' : 'Save')}</span>
             </button>
+
+            {isAdmin && isSaved && (
+              <Link to="/admin/saved">
+                <button 
+                  className="px-2 py-1.5 rounded-lg text-[11px] font-bold text-slate-600 hover:text-blue-600 bg-slate-100 hover:bg-blue-50 border border-slate-200 transition-colors"
+                  title="Open Admin Saved Manager"
+                >
+                  Manage in Admin →
+                </button>
+              </Link>
+            )}
 
             <button 
               onClick={() => {
@@ -402,7 +484,7 @@ export default function AppDetails() {
                     ? "bg-purple-50 text-purple-700 border-purple-200" 
                     : "bg-blue-50 text-blue-600 border-blue-100"
                 )}>
-                  {app.category}
+                  {getCategoryName(app.category)}
                 </span>
                 <h1 className="text-3xl sm:text-4xl font-black text-slate-900 leading-tight tracking-tight">{app.name}</h1>
                 <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">
@@ -444,35 +526,39 @@ export default function AppDetails() {
           <AdSlot page="detail" slotIndex={0} pageVisitId={pageVisitId} className="mt-4" />
 
           {/* Download Action Bar */}
-          <div className="mt-6 pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center gap-4">
-            <Button 
-              onClick={handleDownload}
-              variant="default"
-              className={cn(
-                "w-full sm:flex-1 h-14 rounded-2xl text-base font-black text-white shadow-xl transition-all active:scale-[0.98]",
-                isBundle 
-                  ? "bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 shadow-purple-500/25" 
-                  : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-blue-500/25"
-              )}
-              loading={downloading}
-            >
-              <Download size={22} className="mr-2" />
-              {app.downloadButtonText && app.downloadButtonText.trim() !== '' 
-                ? app.downloadButtonText 
-                : (isBundle 
-                    ? (app.size && app.size.trim() !== '' ? `Download Bundle (${app.size})` : 'Download Bundle')
-                    : isPC
-                    ? (app.size && app.size.trim() !== '' ? `Download PC Software (${app.size})` : 'Download PC Software')
-                    : (app.size && app.size.trim() !== '' ? `Download APK (${app.size})` : 'Download APK')
-                  )
-              }
-            </Button>
+          <div className="mt-6 pt-6 border-t border-slate-100 flex flex-col items-stretch gap-3">
+            <div className="flex flex-col sm:flex-row items-center gap-4">
+              <Button 
+                onClick={handleDownload}
+                variant="default"
+                className={cn(
+                  "w-full sm:flex-1 h-14 rounded-2xl text-base font-black text-white shadow-xl transition-all active:scale-[0.98]",
+                  isBundle 
+                    ? "bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 shadow-purple-500/25" 
+                    : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-blue-500/25"
+                )}
+                loading={downloading}
+              >
+                <Download size={22} className="mr-2" />
+                <span>
+                  {app.downloadButtonText && app.downloadButtonText.trim() !== '' 
+                    ? app.downloadButtonText 
+                    : (isBundle 
+                        ? (app.size && app.size.trim() !== '' ? `Download Bundle (${app.size})` : 'Download Bundle')
+                        : isPC
+                        ? (app.size && app.size.trim() !== '' ? `Download PC Software (${app.size})` : 'Download PC Software')
+                        : (app.size && app.size.trim() !== '' ? `Download APK (${app.size})` : 'Download APK')
+                      )
+                  }
+                </span>
+              </Button>
 
-            <div className="flex items-center gap-2 text-[12px] font-black text-emerald-600 bg-emerald-50 px-4 py-3 rounded-2xl border border-emerald-200 whitespace-nowrap shadow-sm">
-              <ShieldCheck size={20} />
-              <span>
-                {isBundle ? '100% Tested Pack' : isPC ? '100% Clean Software' : '100% Clean APK'}
-              </span>
+              <div className="flex items-center gap-2 text-[12px] font-black text-emerald-600 bg-emerald-50 px-4 py-3 rounded-2xl border border-emerald-200 whitespace-nowrap shadow-sm">
+                <ShieldCheck size={20} />
+                <span>
+                  {isBundle ? '100% Tested Pack' : isPC ? '100% Clean Software' : '100% Clean APK'}
+                </span>
+              </div>
             </div>
           </div>
         </section>

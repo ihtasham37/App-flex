@@ -1,12 +1,12 @@
 {
-  "projectId": "atomic-atom-9pnh2",
-  "appId": "1:331263083915:web:c388032fc42eaf954e1b8e",
-  "apiKey": "AIzaSyATgbtYc3T5Ig4PbFKgBMT8G0oGTnrxDxY",
-  "authDomain": "atomic-atom-9pnh2.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-mobilio-7bad3c2f-737d-42d6-b4f0-d5489e003a32",
-  "storageBucket": "atomic-atom-9pnh2.firebasestorage.app",
-  "messagingSenderId": "331263083915",
+  "projectId": "aiportfolio-369ed",
+  "appId": "1:15819368949:web:e2fef8a8387d2599d158bc",
+  "apiKey": "AIzaSyAeGxA9tzTCntBDwpZJ92jlqNIaHnL8QMc",
+  "authDomain": "aiportfolio-369ed.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "aiportfolio-369ed.firebasestorage.app",
+  "messagingSenderId": "15819368949",
   "measurementId": "",
-  "oAuthClientId": "331263083915-m65es51fudj9jvqgf39vq1vlei02mhmn.apps.googleusercontent.com",
+  "oAuthClientId": "",
   "recaptchaSiteKey": ""
 }

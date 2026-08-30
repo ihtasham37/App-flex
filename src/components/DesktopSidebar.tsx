@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Layers, Star, TrendingUp, ChevronRight } from 'lucide-react';
 import { GlassCard } from './ui/GlassCard';
+import { useApps } from '../context/AppsContext';
 
 interface AppData {
   id: string;
@@ -17,6 +18,8 @@ interface DesktopSidebarProps {
 }
 
 export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({ categories, trendingApps }) => {
+  const { getCategoryName } = useApps();
+
   return (
     <aside className="hidden lg:flex flex-col gap-8 w-full">
       {/* Categories Section */}
@@ -30,11 +33,11 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({ categories, tren
             {categories.slice(0, 12).map((cat) => (
               <Link
                 key={cat}
-                to={`/explore?category=${encodeURIComponent(cat)}`}
+                to={`/explore?category=${encodeURIComponent(getCategoryName(cat))}`}
                 className="group flex items-center justify-between p-3 hover:bg-slate-50 transition-colors"
               >
                 <span className="text-sm font-bold text-slate-600 group-hover:text-blue-600 transition-colors capitalize">
-                  {cat}
+                  {getCategoryName(cat)}
                 </span>
                 <ChevronRight size={14} className="text-slate-300 group-hover:text-blue-400 group-hover:translate-x-0.5 transition-all" />
               </Link>
@@ -82,7 +85,7 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({ categories, tren
                     <span className="text-[10px] font-black text-slate-600">{app.rating || '4.5'}</span>
                   </div>
                   <span className="text-[9px] font-bold text-slate-400 uppercase truncate">
-                    {app.category}
+                    {getCategoryName(app.category)}
                   </span>
                 </div>
               </div>
