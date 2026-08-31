@@ -1,47 +1,51 @@
 import React, { useState } from 'react';
-import { GlassCard } from '../../components/ui/GlassCard';
-import { 
-  Shield, Settings as SettingsIcon, Bell, Database, Lock, Save, 
-  Globe, Megaphone, Image as ImageIcon, Link as LinkIcon, X, 
-  Sparkles, Zap, Smartphone, RefreshCw, CheckCircle2 
-} from 'lucide-react';
-import { Button } from '../../components/ui/Button';
-import { Input } from '../../components/ui/Input';
 import { useSettings } from '../../context/SettingsContext';
 import { useApps } from '../../context/AppsContext';
+import { syncCatalogSnapshot } from '../../lib/catalogSync';
+import { GlassCard } from '../../components/ui/GlassCard';
+import { Button } from '../../components/ui/Button';
+import { 
+  Save, 
+  RefreshCw, 
+  CheckCircle2, 
+  Smartphone, 
+  Megaphone, 
+  Layers, 
+  Lock, 
+  Upload, 
+  Sparkles,
+  AlertTriangle,
+  Zap,
+  Globe
+} from 'lucide-react';
 
 export default function AdminSettings() {
   const { settings, updateSettings, broadcastCodeUpdate, syncAllCatalogAndCode, loading } = useSettings();
   const { refreshApps } = useApps();
-  const [isSaving, setIsSaving] = useState(false);
-  const [isBroadcasting, setIsBroadcasting] = useState(false);
+  const [formData, setFormData] = useState({ ...settings });
   const [broadcastNote, setBroadcastNote] = useState('');
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [broadcastSuccess, setBroadcastSuccess] = useState<string | null>(null);
-  const [formData, setFormData] = useState(settings);
-
-  // Sync local state if settings change (e.g., initial load)
-  React.useEffect(() => {
-    setFormData(settings);
-  }, [settings]);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
       await updateSettings(formData);
-      alert('Settings saved successfully!');
-    } catch (error) {
-      console.error('Error saving settings:', error);
+      alert('Settings updated successfully!');
+    } catch (err) {
+      console.error('Failed to save settings:', err);
       alert('Failed to save settings.');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleBroadcastCodeUpdate = async () => {
+  const handleBroadcastCode = async () => {
     setIsBroadcasting(true);
     setBroadcastSuccess(null);
     try {
-      const res = await broadcastCodeUpdate(broadcastNote.trim() || 'New features & GitHub updates pushed live.');
+      const res = await broadcastCodeUpdate(broadcastNote.trim() || 'New feature update released.');
       setBroadcastSuccess(`Code Release v${res.codeVersion} broadcasted! Active users will auto-update.`);
       setTimeout(() => setBroadcastSuccess(null), 6000);
     } catch (err) {
@@ -56,9 +60,12 @@ export default function AdminSettings() {
     setIsBroadcasting(true);
     setBroadcastSuccess(null);
     try {
+      // 1. Rebuild 1-read snapshot
+      await syncCatalogSnapshot();
+      // 2. Broadcast code
       const res = await syncAllCatalogAndCode(broadcastNote.trim() || 'Complete catalog and frontend code sync applied.');
-      await refreshApps(true);
-      setBroadcastSuccess(`Complete Sync Broadcasted (Code v${res.codeVersion} + Catalog v${res.catalogVersion})!`);
+      await refreshApps(false);
+      setBroadcastSuccess(`1-Read Snapshot & Complete Sync Broadcasted (Code v${res.codeVersion} + Catalog v${res.catalogVersion})!`);
       setTimeout(() => setBroadcastSuccess(null), 6000);
     } catch (err) {
       console.error('Full sync failed:', err);
@@ -78,11 +85,11 @@ export default function AdminSettings() {
   if (loading) return <div>Loading...</div>;
 
   return (
-    <div className="space-y-8 max-w-4xl">
+    <div className="space-y-8 max-w-4xl pb-12">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1">
           <h1 className="text-2xl font-black text-gray-900">Platform Settings</h1>
-          <p className="text-sm text-gray-500 font-medium">Configure AppFlix branding and system alerts.</p>
+          <p className="text-sm text-gray-500 font-medium">Configure AppFlix branding, 1-read optimization, and system alerts.</p>
         </div>
         <Button 
           onClick={handleSave} 
@@ -95,348 +102,98 @@ export default function AdminSettings() {
       </div>
 
       <div className="grid gap-6">
-        {/* App Branding Section */}
-        <GlassCard className="p-6 sm:p-8 space-y-6">
-          <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
-            <Globe className="text-blue-600" size={20} />
-            <h2 className="text-lg font-black text-slate-800">App Branding</h2>
-          </div>
-          
-          <div className="grid gap-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-500 uppercase tracking-wider">App Name</label>
-              <Input 
-                value={formData.appName}
-                onChange={(e) => setFormData({ ...formData, appName: e.target.value })}
-                placeholder="e.g. AppFlix"
-                className="rounded-xl"
-              />
-              <p className="text-[10px] text-slate-400 font-medium">This name will appear in the header and titles across the app.</p>
+        
+        {/* Instant Live Broadcast Center (1-Read Architecture) */}
+        <GlassCard className="p-6 sm:p-8 space-y-6 border-2 border-blue-500/30 bg-gradient-to-br from-blue-50/50 via-indigo-50/30 to-white relative overflow-hidden">
+          <div className="flex items-center gap-3 border-b border-blue-100 pb-4">
+            <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-600/20">
+              <Sparkles size={20} />
             </div>
-          </div>
-        </GlassCard>
-
-        {/* Live Broadcast & Code Sync Management Section */}
-        <GlassCard className="p-6 sm:p-8 space-y-6 border-2 border-blue-500/20 bg-gradient-to-b from-blue-50/30 to-transparent">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md shadow-blue-500/30">
-                <Zap size={20} className="fill-current" />
-              </div>
-              <div>
-                <h2 className="text-lg font-black text-slate-900">GitHub Code & App Sync Broadcast</h2>
-                <p className="text-xs text-slate-500 font-medium">Auto-push new features to all mobile devices & browsers without manual app store updates.</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-black uppercase tracking-wider bg-blue-100 text-blue-800 px-3 py-1 rounded-full border border-blue-200">
-                Code Build: v{settings.codeReleaseVersion || 1}
-              </span>
+            <div>
+              <h2 className="text-lg font-black text-slate-900">1-Read Snapshot & Live Broadcast Center</h2>
+              <p className="text-xs text-slate-500 font-bold">Bundle 300+ apps into 1 single Firestore document read</p>
             </div>
           </div>
 
           {broadcastSuccess && (
-            <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex items-center gap-3 animate-fadeIn text-xs font-bold">
-              <CheckCircle2 size={18} className="text-emerald-600 flex-shrink-0" />
-              <span>{broadcastSuccess}</span>
+            <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex items-center gap-3 animate-fadeIn">
+              <CheckCircle2 size={20} className="text-emerald-600 flex-shrink-0" />
+              <span className="text-xs font-black">{broadcastSuccess}</span>
             </div>
           )}
 
           <div className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-700 uppercase tracking-wider">
-                Release Note / Update Message (Shown to Users on Update)
+            <div className="space-y-2">
+              <label className="text-xs font-black uppercase tracking-wider text-slate-700">
+                Changelog Note (Shown to app users upon sync)
               </label>
-              <Input 
+              <input
+                type="text"
+                placeholder="e.g. Added 50 new PC software items, updated Lightroom presets..."
                 value={broadcastNote}
                 onChange={(e) => setBroadcastNote(e.target.value)}
-                placeholder="e.g. Added new download features, performance enhancements, and UI upgrades."
-                className="rounded-xl text-xs py-2.5"
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs text-slate-800 font-medium"
               />
             </div>
 
-            <div className="grid sm:grid-cols-2 gap-4 pt-2">
-              {/* Broadcast Code Update Only */}
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 font-black text-xs text-slate-800">
-                    <Smartphone size={16} className="text-blue-600" />
-                    <span>Push New Code / Features</span>
-                  </div>
-                  <span className="text-[10px] font-bold text-slate-400 font-mono">
-                    v{settings.codeReleaseVersion || 1}
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-500 leading-relaxed font-medium">
-                  Use this whenever you push new React/TypeScript code to GitHub so all users get the new interface.
-                </p>
-                <Button
-                  type="button"
-                  onClick={handleBroadcastCodeUpdate}
-                  loading={isBroadcasting}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl py-2.5 shadow-md shadow-blue-500/20"
-                >
-                  <Sparkles size={14} className="mr-1.5" />
-                  Broadcast Code Update
-                </Button>
-              </div>
+            <div className="grid sm:grid-cols-2 gap-3 pt-2">
+              <Button
+                onClick={handleFullSync}
+                disabled={isBroadcasting}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-black text-xs py-3.5 rounded-xl shadow-lg shadow-blue-600/25 flex items-center justify-center gap-2"
+              >
+                <Sparkles size={16} className={isBroadcasting ? 'animate-spin' : ''} />
+                <span>{isBroadcasting ? 'Broadcasting Snapshot...' : '1-Click Full System Broadcast (Catalog + Code)'}</span>
+              </Button>
 
-              {/* Broadcast Everything (Code + Catalog) */}
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-50/50 to-purple-50/50 border border-indigo-200/80 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 font-black text-xs text-indigo-900">
-                    <Zap size={16} className="text-amber-500 fill-current" />
-                    <span>⚡ Complete Full Sync (Recommended)</span>
-                  </div>
-                </div>
-                <p className="text-[11px] text-indigo-700/80 leading-relaxed font-medium">
-                  Increments both Code Build & Catalog versions. Ensures 100% of apps, categories, and code are fresh.
-                </p>
-                <Button
-                  type="button"
-                  onClick={handleFullSync}
-                  loading={isBroadcasting}
-                  className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black text-xs rounded-xl py-2.5 shadow-md shadow-indigo-500/20"
-                >
-                  <Zap size={14} className="mr-1.5 fill-current" />
-                  ⚡ Sync Everything (Code + Apps)
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          <div className="pt-4 border-t border-slate-100 grid sm:grid-cols-2 gap-6">
-            <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Manual Catalog Version</label>
-              <div className="flex gap-2">
-                <Input 
-                  type="number"
-                  value={formData.catalogVersion || 1}
-                  onChange={(e) => setFormData({ ...formData, catalogVersion: parseInt(e.target.value) || 1 })}
-                  className="rounded-xl flex-1"
-                />
-                <Button 
-                  type="button"
-                  onClick={() => setFormData({ ...formData, catalogVersion: (formData.catalogVersion || 0) + 1 })}
-                  variant="outline"
-                  className="rounded-xl px-4 border-orange-200 text-orange-600 hover:bg-orange-50"
-                  title="Increment Catalog Version"
-                >
-                  +1
-                </Button>
-              </div>
-              <p className="text-[10px] text-slate-400 font-medium">
-                Catalog version forces a fresh download of apps & categories.
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Manual Code Version</label>
-              <div className="flex gap-2">
-                <Input 
-                  type="number"
-                  value={formData.codeReleaseVersion || 1}
-                  onChange={(e) => setFormData({ ...formData, codeReleaseVersion: parseInt(e.target.value) || 1 })}
-                  className="rounded-xl flex-1"
-                />
-                <Button 
-                  type="button"
-                  onClick={() => setFormData({ ...formData, codeReleaseVersion: (formData.codeReleaseVersion || 0) + 1 })}
-                  variant="outline"
-                  className="rounded-xl px-4 border-blue-200 text-blue-600 hover:bg-blue-50"
-                  title="Increment Code Version"
-                >
-                  +1
-                </Button>
-              </div>
-              <p className="text-[10px] text-slate-400 font-medium">
-                Code version triggers automatic hard-refresh on user mobiles.
-              </p>
+              <Button
+                onClick={handleBroadcastCode}
+                disabled={isBroadcasting}
+                variant="outline"
+                className="font-bold text-xs py-3.5 rounded-xl border-slate-200 hover:bg-slate-50 flex items-center justify-center gap-2"
+              >
+                <RefreshCw size={16} className={isBroadcasting ? 'animate-spin' : ''} />
+                <span>Broadcast Code Release Only</span>
+              </Button>
             </div>
           </div>
         </GlassCard>
 
-        {/* Support & Social Links Section */}
+        {/* App Branding Section */}
         <GlassCard className="p-6 sm:p-8 space-y-6">
           <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
-            <Shield className="text-emerald-600" size={20} />
-            <h2 className="text-lg font-black text-slate-800">Support & Social Links</h2>
-          </div>
-          
-          <div className="grid sm:grid-cols-2 gap-6">
-            <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Support Email</label>
-              <div className="relative">
-                <Globe className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <Input 
-                  value={formData.supportEmail || ''}
-                  onChange={(e) => setFormData({ ...formData, supportEmail: e.target.value })}
-                  placeholder="support@example.com"
-                  className="rounded-xl pl-10"
-                />
-              </div>
-              <p className="text-[10px] text-slate-400 font-medium">Used for "Help with Email" in user account.</p>
+            <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+              <Smartphone size={20} />
             </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-500 uppercase tracking-wider">WhatsApp Support Number</label>
-              <div className="relative">
-                <Megaphone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <Input 
-                  value={formData.supportWhatsapp || ''}
-                  onChange={(e) => setFormData({ ...formData, supportWhatsapp: e.target.value })}
-                  placeholder="+923000000000"
-                  className="rounded-xl pl-10"
-                />
-              </div>
-              <p className="text-[10px] text-slate-400 font-medium">Include country code (e.g. +92...).</p>
+            <div>
+              <h2 className="text-lg font-black text-slate-900">App Branding & Details</h2>
+              <p className="text-xs text-slate-500 font-bold">Customize app name, tagline, and contact email</p>
             </div>
           </div>
 
-          <div className="grid sm:grid-cols-2 gap-6">
+          <div className="grid sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-500 uppercase tracking-wider">WhatsApp Channel Link</label>
-              <div className="relative">
-                <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <Input 
-                  value={formData.whatsappChannel || ''}
-                  onChange={(e) => setFormData({ ...formData, whatsappChannel: e.target.value })}
-                  placeholder="https://whatsapp.com/channel/..."
-                  className="rounded-xl pl-10"
-                />
-              </div>
+              <label className="text-xs font-black uppercase tracking-wider text-slate-600">App Name</label>
+              <input
+                type="text"
+                value={formData.appName || ''}
+                onChange={(e) => setFormData({ ...formData, appName: e.target.value })}
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-800"
+              />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Telegram Group/Channel Link</label>
-              <div className="relative">
-                <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <Input 
-                  value={formData.telegramLink || ''}
-                  onChange={(e) => setFormData({ ...formData, telegramLink: e.target.value })}
-                  placeholder="https://t.me/..."
-                  className="rounded-xl pl-10"
-                />
-              </div>
+              <label className="text-xs font-black uppercase tracking-wider text-slate-600">Contact Email</label>
+              <input
+                type="email"
+                value={formData.contactEmail || ''}
+                onChange={(e) => setFormData({ ...formData, contactEmail: e.target.value })}
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-800"
+              />
             </div>
           </div>
         </GlassCard>
 
-        {/* Update Banner Section */}
-        <GlassCard className="p-6 sm:p-8 space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-            <div className="flex items-center gap-3">
-              <Megaphone className="text-purple-600" size={20} />
-              <h2 className="text-lg font-black text-slate-800">Update Popup Banner</h2>
-            </div>
-            <button 
-              onClick={handleBannerToggle}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${formData.updateBanner.enabled ? 'bg-purple-600' : 'bg-slate-200'}`}
-            >
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${formData.updateBanner.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
-            </button>
-          </div>
-
-          <div className={`space-y-5 transition-opacity ${formData.updateBanner.enabled ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
-            <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Banner Heading</label>
-              <Input 
-                value={formData.updateBanner.heading}
-                onChange={(e) => setFormData({ 
-                  ...formData, 
-                  updateBanner: { ...formData.updateBanner, heading: e.target.value } 
-                })}
-                placeholder="e.g. New Version Available! Update Now."
-                className="rounded-xl"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Banner Description</label>
-              <textarea 
-                value={formData.updateBanner.description}
-                onChange={(e) => setFormData({ 
-                  ...formData, 
-                  updateBanner: { ...formData.updateBanner, description: e.target.value } 
-                })}
-                placeholder="Briefly explain what's new in this update..."
-                className="w-full min-h-[80px] px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm font-medium transition-all"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Banner Image URL</label>
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <Input 
-                    value={formData.updateBanner.image}
-                    onChange={(e) => setFormData({ 
-                      ...formData, 
-                      updateBanner: { ...formData.updateBanner, image: e.target.value } 
-                    })}
-                    placeholder="https://example.com/banner.png"
-                    className="rounded-xl"
-                  />
-                </div>
-                {formData.updateBanner.image && (
-                  <div className="w-12 h-10 rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
-                    <img src={formData.updateBanner.image} alt="Preview" className="w-full h-full object-cover" />
-                  </div>
-                )}
-              </div>
-              <p className="text-[10px] text-slate-400 font-medium">Shown as a featured image in the update popup.</p>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Action Link (e.g. Play Store URL)</label>
-              <div className="relative">
-                <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <Input 
-                  value={formData.updateBanner.link}
-                  onChange={(e) => setFormData({ 
-                    ...formData, 
-                    updateBanner: { ...formData.updateBanner, link: e.target.value } 
-                  })}
-                  placeholder="https://play.google.com/store/apps/details?id=..."
-                  className="rounded-xl pl-10"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Banner Button Text</label>
-              <Input 
-                value={formData.updateBanner.buttonText || ''}
-                onChange={(e) => setFormData({ 
-                  ...formData, 
-                  updateBanner: { ...formData.updateBanner, buttonText: e.target.value } 
-                })}
-                placeholder="e.g. Update Now, Install App, Get Started"
-                className="rounded-xl"
-              />
-              <p className="text-[10px] text-slate-400 font-medium">Text that appears on the main action button.</p>
-            </div>
-
-            <div className="p-3 bg-blue-50 border border-blue-100 rounded-2xl">
-              <p className="text-[11px] text-blue-700 font-bold leading-relaxed">
-                <Bell size={12} className="inline mr-1 mb-0.5" /> 
-                Note: This banner is linked to the "Catalog Version" above. Whenever you increment the Catalog Version (+1), this banner will automatically show again to all users who have already seen it.
-              </p>
-            </div>
-          </div>
-        </GlassCard>
-
-        {/* Maintenance / Dangerous Section */}
-        <div className="bg-red-50/50 border border-red-100 rounded-2xl p-6 flex flex-col sm:flex-row items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center text-red-600 shrink-0">
-            <Lock size={24} />
-          </div>
-          <div className="flex-1 text-center sm:text-left">
-            <h3 className="font-black text-red-900">Maintenance Mode</h3>
-            <p className="text-xs text-red-700 font-medium">Restrict public access to the platform. Only admins can view content.</p>
-          </div>
-          <Button variant="outline" className="border-red-200 text-red-600 hover:bg-red-50 rounded-xl whitespace-nowrap">Enable Mode</Button>
-        </div>
       </div>
     </div>
   );

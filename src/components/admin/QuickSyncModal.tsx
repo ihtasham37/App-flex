@@ -1,13 +1,10 @@
 import React, { useState } from 'react';
 import { useSettings } from '../../context/SettingsContext';
 import { useApps } from '../../context/AppsContext';
-import { 
-  Zap, RefreshCw, Sparkles, CheckCircle2, ShieldCheck, 
-  Layers, Globe, AlertCircle, X, ArrowRight, Smartphone
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { syncCatalogSnapshot } from '../../lib/catalogSync';
+import { GlassCard } from '../ui/GlassCard';
 import { Button } from '../ui/Button';
-import { Input } from '../ui/Input';
+import { Sparkles, RefreshCw, Layers, CheckCircle2, AlertCircle, X } from 'lucide-react';
 
 interface QuickSyncModalProps {
   isOpen: boolean;
@@ -15,9 +12,8 @@ interface QuickSyncModalProps {
 }
 
 export function QuickSyncModal({ isOpen, onClose }: QuickSyncModalProps) {
-  const { settings, syncAllCatalogAndCode, broadcastCodeUpdate, updateSettings } = useSettings();
+  const { settings, broadcastCodeUpdate } = useSettings();
   const { refreshApps } = useApps();
-
   const [note, setNote] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
   const [successResult, setSuccessResult] = useState<{
@@ -32,11 +28,18 @@ export function QuickSyncModal({ isOpen, onClose }: QuickSyncModalProps) {
     setIsSyncing(true);
     setSuccessResult(null);
     try {
-      const res = await syncAllCatalogAndCode(note.trim() || 'New features and catalog updates broadcasted.');
-      await refreshApps(true);
-      setSuccessResult({ ...res, type: 'all' });
+      // 1. Rebuild single document snapshot for 1-read optimization
+      await syncCatalogSnapshot();
+      // 2. Broadcast code update
+      const codeRes = await broadcastCodeUpdate(note.trim() || 'Comprehensive catalog and code sync released.');
+      await refreshApps(false);
+      setSuccessResult({
+        catalogVersion: (settings.catalogVersion || 1) + 1,
+        codeVersion: codeRes.codeVersion,
+        type: 'all'
+      });
     } catch (err) {
-      console.error('Failed to broadcast full sync:', err);
+      console.error('Failed to broadcast sync:', err);
       alert('Failed to broadcast sync. Check Firestore permissions.');
     } finally {
       setIsSyncing(false);
@@ -61,13 +64,9 @@ export function QuickSyncModal({ isOpen, onClose }: QuickSyncModalProps) {
     setIsSyncing(true);
     setSuccessResult(null);
     try {
-      const nextCat = (settings.catalogVersion || 1) + 1;
-      await updateSettings({
-        catalogVersion: nextCat,
-        lastCatalogUpdate: Date.now(),
-      });
-      await refreshApps(true);
-      setSuccessResult({ catalogVersion: nextCat, type: 'catalog' });
+      await syncCatalogSnapshot();
+      await refreshApps(false);
+      setSuccessResult({ catalogVersion: (settings.catalogVersion || 1) + 1, type: 'catalog' });
     } catch (err) {
       console.error('Failed to sync catalog:', err);
       alert('Failed to sync catalog.');
@@ -88,118 +87,101 @@ export function QuickSyncModal({ isOpen, onClose }: QuickSyncModalProps) {
         </button>
 
         {/* Header */}
-        <div className="flex items-center gap-3.5 mb-6">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-600 flex items-center justify-center text-white shadow-lg shadow-orange-500/25 flex-shrink-0">
-            <Zap size={24} className="fill-current" />
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
+            <Sparkles size={24} />
           </div>
           <div>
-            <h3 className="text-xl font-black text-slate-900">
-              Broadcast Live Sync
-            </h3>
-            <p className="text-xs text-slate-500 font-medium">
-              Push new GitHub code & app changes to all user devices instantly.
-            </p>
+            <h2 className="text-xl font-black text-slate-900">Broadcast Instant Sync</h2>
+            <p className="text-xs text-slate-500 font-bold">1-Read Snapshot & Realtime Update Engine</p>
           </div>
         </div>
 
         {/* Success Alert */}
         {successResult && (
-          <div className="mb-6 p-4 rounded-2xl bg-emerald-50 border border-emerald-200/80 text-emerald-900 animate-fadeIn">
-            <div className="flex items-center gap-2 font-black text-sm text-emerald-800">
-              <CheckCircle2 size={18} className="text-emerald-600" />
-              <span>Update Broadcasted Successfully!</span>
-            </div>
-            <p className="text-xs text-emerald-700 mt-1 leading-relaxed">
-              All active mobile and desktop users will now automatically reload and download the newest build.
-            </p>
-            <div className="mt-2.5 flex items-center gap-3 text-[11px] font-bold text-emerald-800">
-              {successResult.codeVersion && (
-                <span className="bg-white px-2.5 py-1 rounded-lg border border-emerald-200 shadow-2xs">
-                  Code Release: v{successResult.codeVersion}
-                </span>
-              )}
-              {successResult.catalogVersion && (
-                <span className="bg-white px-2.5 py-1 rounded-lg border border-emerald-200 shadow-2xs">
-                  Catalog Version: v{successResult.catalogVersion}
-                </span>
-              )}
+          <div className="mb-6 p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex items-start gap-3">
+            <CheckCircle2 size={20} className="text-emerald-600 flex-shrink-0 mt-0.5" />
+            <div className="text-xs font-bold space-y-1">
+              <p className="font-black text-emerald-800">Broadcast Successfully Sent to All Users!</p>
+              <div className="flex flex-wrap gap-2 text-[11px] text-emerald-700 pt-1">
+                {successResult.catalogVersion && (
+                  <span className="bg-emerald-100/80 px-2 py-0.5 rounded-md">
+                    Catalog Version: v{successResult.catalogVersion} (1 Read Ready)
+                  </span>
+                )}
+                {successResult.codeVersion && (
+                  <span className="bg-emerald-100/80 px-2 py-0.5 rounded-md">
+                    Code Release: v{successResult.codeVersion}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         )}
 
-        {/* Current State Info */}
-        <div className="grid grid-cols-2 gap-3 mb-5 p-3.5 bg-slate-50 rounded-2xl border border-slate-100 text-xs">
-          <div>
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
-              Active Code Build
-            </span>
-            <span className="font-black text-slate-800 text-sm">
-              v{settings.codeReleaseVersion || 1}
-            </span>
-          </div>
-          <div>
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
-              Catalog Version
-            </span>
-            <span className="font-black text-slate-800 text-sm">
-              v{settings.catalogVersion || 1}
-            </span>
-          </div>
-        </div>
-
-        {/* Release Note Input */}
-        <div className="space-y-1.5 mb-6">
-          <label className="text-xs font-black text-slate-700 uppercase tracking-wider">
-            Release Note / What's New? (Optional)
+        {/* Note Input */}
+        <div className="space-y-2 mb-6">
+          <label className="text-xs font-black uppercase tracking-wider text-slate-600">
+            Update Changelog Note (Optional)
           </label>
-          <Input
+          <input
+            type="text"
+            placeholder="e.g. Added 50 new PC software and Lightroom presets..."
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="e.g. Added new features from GitHub, faster downloads, UI improvements..."
-            className="rounded-xl text-xs py-2.5"
+            className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs text-slate-800 placeholder:text-slate-400 font-medium"
           />
+        </div>
+
+        {/* Current Versions Info */}
+        <div className="grid grid-cols-2 gap-3 mb-6 p-3.5 rounded-2xl bg-slate-50 border border-slate-100">
+          <div className="text-center">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Current Catalog</span>
+            <p className="text-sm font-black text-slate-800">
+              v{settings.catalogVersion || 1}
+            </p>
+          </div>
+          <div className="text-center border-l border-slate-200">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Current Code Version</span>
+            <p className="text-sm font-black text-slate-800">
+              v{settings.codeReleaseVersion || 1}
+            </p>
+          </div>
         </div>
 
         {/* Action Buttons */}
         <div className="space-y-3">
-          {/* Primary 1-Click Sync */}
           <Button
             onClick={handleSyncAll}
-            loading={isSyncing}
-            className="w-full h-13 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:via-indigo-700 hover:to-purple-700 text-white font-black text-sm shadow-xl shadow-blue-500/25 flex items-center justify-center gap-2"
+            disabled={isSyncing}
+            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-xs py-3.5 rounded-xl shadow-lg shadow-blue-500/25 flex items-center justify-center gap-2"
           >
-            <Sparkles size={18} />
-            <span>⚡ Sync Everything (Code + Apps)</span>
+            <Sparkles size={16} className={isSyncing ? 'animate-spin' : ''} />
+            <span>{isSyncing ? 'Broadcasting & Building Snapshot...' : '1-Click Full System Broadcast (Catalog + Code)'}</span>
           </Button>
 
-          <div className="grid grid-cols-2 gap-3 pt-1">
+          <div className="grid grid-cols-2 gap-3">
             <Button
-              type="button"
-              variant="outline"
-              onClick={handleSyncCodeOnly}
+              onClick={handleSyncCatalogOnly}
               disabled={isSyncing}
-              className="rounded-xl text-xs font-bold py-2.5 border-slate-200 hover:bg-slate-50 flex items-center justify-center gap-1.5"
+              variant="outline"
+              className="text-xs font-bold py-2.5 rounded-xl border-slate-200 hover:bg-slate-50 flex items-center justify-center gap-1.5"
             >
-              <Smartphone size={15} className="text-indigo-600" />
-              <span>Sync Code Only</span>
+              <Layers size={14} />
+              <span>Catalog Only (1-Read)</span>
             </Button>
 
             <Button
-              type="button"
-              variant="outline"
-              onClick={handleSyncCatalogOnly}
+              onClick={handleSyncCodeOnly}
               disabled={isSyncing}
-              className="rounded-xl text-xs font-bold py-2.5 border-slate-200 hover:bg-slate-50 flex items-center justify-center gap-1.5"
+              variant="outline"
+              className="text-xs font-bold py-2.5 rounded-xl border-slate-200 hover:bg-slate-50 flex items-center justify-center gap-1.5"
             >
-              <Layers size={15} className="text-orange-600" />
-              <span>Sync Catalog Only</span>
+              <RefreshCw size={14} />
+              <span>Code Only</span>
             </Button>
           </div>
         </div>
-
-        <p className="text-[11px] text-slate-400 text-center mt-5 font-medium">
-          Whenever you push new code to GitHub, click <b>"Sync Everything"</b> to auto-update all user mobiles.
-        </p>
       </div>
     </div>
   );

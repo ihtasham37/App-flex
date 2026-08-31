@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useSettings } from '../context/SettingsContext';
-import { cacheService } from '../lib/cacheService';
 import { Sparkles, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Button } from './ui/Button';
@@ -24,23 +23,10 @@ export function LiveUpdateListener() {
     try {
       const serverVersion = settings.codeReleaseVersion || 1;
       
-      // Save version FIRST to prevent loop
+      // Save version FIRST to prevent repeat prompts
       localStorage.setItem('appflex_client_code_version', serverVersion.toString());
 
-      // 1. Clear caches
-      cacheService.clearAll();
-
-      // 2. Clear Browser Cache API / Service Worker caches
-      if (typeof window !== 'undefined' && 'caches' in window) {
-        try {
-          const cacheNames = await caches.keys();
-          await Promise.all(cacheNames.map((name) => caches.delete(name)));
-        } catch (e) {
-          console.warn('[UpdateListener] Cache API clear error:', e);
-        }
-      }
-
-      // 3. Unregister or update Service Worker if available
+      // Update Service Worker if available
       if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
         try {
           const registrations = await navigator.serviceWorker.getRegistrations();
@@ -52,10 +38,10 @@ export function LiveUpdateListener() {
         }
       }
 
-      // 4. Reload page
+      // Reload page smoothly
       setTimeout(() => {
         window.location.reload();
-      }, 200);
+      }, 300);
     } catch (err) {
       console.error('[UpdateListener] Error during update reload:', err);
       window.location.reload();
@@ -68,13 +54,13 @@ export function LiveUpdateListener() {
 
     const localVersion = getStoredVersion();
 
-    // If first-ever launch on this device/browser, save and don't interrupt
+    // If first launch on this browser/session, record current version silently
     if (localVersion === 0) {
       localStorage.setItem('appflex_client_code_version', serverVersion.toString());
       return;
     }
 
-    // If server version is strictly greater than local version, trigger once!
+    // If server version is strictly newer than local version, notify
     if (serverVersion > localVersion) {
       console.log(`[LiveUpdateListener] New Code Release: Server v${serverVersion} > Local v${localVersion}`);
       setShowUpdateModal(true);
@@ -110,7 +96,6 @@ export function LiveUpdateListener() {
   }, [settings.codeReleaseVersion, settings.autoReloadClients]);
 
   const handleDismiss = () => {
-    // If user clicks later, update local version so modal does NOT keep popping up repeatedly
     if (settings.codeReleaseVersion) {
       localStorage.setItem('appflex_client_code_version', settings.codeReleaseVersion.toString());
     }
