@@ -1,4 +1,4 @@
-import { doc, setDoc, getDocs, collection, updateDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDocs, collection, getDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase';
 import { cacheService, CACHE_KEYS } from './cacheService';
 
@@ -18,6 +18,7 @@ export interface UnifiedCatalogSnapshot {
  * Result:
  * - Brand-new users load EVERYTHING in EXACTLY 1 FIRESTORE READ!
  * - Repeat users and reloads use 0 FIRESTORE READS (Lifetime IndexedDB)!
+ * - Even after clearing browser cache: EXACTLY 1 FIRESTORE READ!
  */
 export async function rebuildAndSyncCatalog() {
   try {
@@ -61,12 +62,22 @@ export async function rebuildAndSyncCatalog() {
       lastCatalogUpdate: newVersion
     }, { merge: true });
 
-    // 3. Update local cache for admin
+    // 3. Update local cache
     await Promise.all([
       cacheService.set(CACHE_KEYS.APPS, allApps),
       cacheService.set(CACHE_KEYS.CATEGORIES, allCats),
-      cacheService.set(CACHE_KEYS.CATALOG_VERSION, newVersion)
+      cacheService.set(CACHE_KEYS.SETTINGS, globalSettings),
+      cacheService.set(CACHE_KEYS.ADS, adsSettings),
+      cacheService.set(CACHE_KEYS.CATALOG_VERSION, newVersion),
+      cacheService.set(CACHE_KEYS.LAST_SYNC_TIME, Date.now())
     ]);
+
+    // 4. Dispatch custom events for in-memory contexts
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('appflex-settings-updated', { detail: globalSettings }));
+      window.dispatchEvent(new CustomEvent('appflex-ads-updated', { detail: adsSettings }));
+      window.dispatchEvent(new CustomEvent('appflex-catalog-updated', { detail: { apps: allApps, categories: allCats } }));
+    }
 
     console.log(`[CatalogSync] Unified snapshot generated: ${allApps.length} apps, ${allCats.length} cats, Version: ${newVersion}`);
     return { success: true, count: allApps.length, version: newVersion };
@@ -77,3 +88,4 @@ export async function rebuildAndSyncCatalog() {
 }
 
 export const syncCatalogSnapshot = rebuildAndSyncCatalog;
+

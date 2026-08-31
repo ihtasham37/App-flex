@@ -60,48 +60,50 @@ export const AppsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   /**
    * EXACTLY 1 FIRESTORE READ FOR ENTIRE APP:
-   * Fetches `settings/catalog` single document containing all apps & categories.
+   * Fetches `settings/catalog` single document containing all apps, categories, settings, and ads.
+   * Total Reads = 1 (even if there are 300+ apps).
+   * Once downloaded, saved to IndexedDB forever (0 reads on all future visits/reloads).
+   * If user clears cache, next open takes EXACTLY 1 read (never 300 reads).
    */
   const fetchSingleDocumentCatalog = useCallback(async (): Promise<boolean> => {
     if (isFetchingRef.current) return false;
     isFetchingRef.current = true;
 
     try {
-      console.log('[AppsProvider] Performing 1-Read Catalog Fetch from `settings/catalog`...');
+      console.log('[AppsProvider] 1-READ OPTIMIZATION: Fetching unified snapshot from `settings/catalog`...');
       
       let fetchedApps: AppItemData[] = [];
       let fetchedCats: CategoryData[] = [];
       let catalogVersion = Date.now();
 
-      try {
-        const snap = await getDoc(doc(db, 'settings', 'catalog'));
-        if (snap.exists()) {
-          const data = snap.data();
-          if (data && Array.isArray(data.apps) && data.apps.length > 0) {
+      const snap = await getDoc(doc(db, 'settings', 'catalog'));
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data) {
+          if (Array.isArray(data.apps) && data.apps.length > 0) {
             fetchedApps = (data.apps as AppItemData[]).filter(item => !item.status || item.status === 'published');
-            fetchedCats = (data.categories || []) as CategoryData[];
-            catalogVersion = data.version || Date.now();
-            console.log(`[AppsProvider] 1-READ SUCCESS: Loaded ${fetchedApps.length} apps & ${fetchedCats.length} categories in 1 Read!`);
+          }
+          if (Array.isArray(data.categories)) {
+            fetchedCats = data.categories as CategoryData[];
+          }
+          catalogVersion = data.version || Date.now();
+
+          console.log(`[AppsProvider] 1-READ SUCCESS: Loaded ${fetchedApps.length} apps & ${fetchedCats.length} categories in 1 Read!`);
+
+          // Propagate settings & ads to cache and trigger events so other providers do NOT make separate reads!
+          if (data.settings) {
+            await cacheService.set(CACHE_KEYS.SETTINGS, data.settings);
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('appflex-settings-updated', { detail: data.settings }));
+            }
+          }
+          if (data.ads) {
+            await cacheService.set(CACHE_KEYS.ADS, data.ads);
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('appflex-ads-updated', { detail: data.ads }));
+            }
           }
         }
-      } catch (err) {
-        console.warn('[AppsProvider] Note reading `settings/catalog`:', err);
-      }
-
-      // Initial Bootstrap Fallback (Only if admin has not yet clicked sync even once)
-      if (fetchedApps.length === 0) {
-        console.log('[AppsProvider] Direct collection bootstrap fetch...');
-        const [appsSnap, catsSnap] = await Promise.all([
-          getDocs(collection(db, 'apps')),
-          getDocs(collection(db, 'categories'))
-        ]);
-
-        fetchedApps = appsSnap.docs
-          .map(d => ({ id: d.id, ...d.data() } as AppItemData))
-          .filter(item => !item.status || item.status === 'published');
-
-        fetchedCats = catsSnap.docs
-          .map(d => ({ id: d.id, ...d.data() } as CategoryData));
       }
 
       if (fetchedApps.length > 0) {
@@ -166,8 +168,16 @@ export const AppsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     initCatalog();
 
+    // Listen for catalog broadcast updates from admin sync
+    const handleCatalogUpdated = (e: any) => {
+      if (e.detail?.apps) setApps(e.detail.apps);
+      if (e.detail?.categories) setCategories(e.detail.categories);
+    };
+    window.addEventListener('appflex-catalog-updated', handleCatalogUpdated);
+
     return () => {
       isMounted = false;
+      window.removeEventListener('appflex-catalog-updated', handleCatalogUpdated);
     };
   }, [fetchSingleDocumentCatalog]);
 

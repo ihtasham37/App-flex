@@ -98,6 +98,9 @@ export default function AdminDashboard() {
         publishedItems: published,
         bannerItems: banners
       });
+
+      // Background auto-sync 1-read snapshot for all 33k+ users
+      rebuildAndSyncCatalog().catch(e => console.warn('Background auto-sync note:', e));
     } catch (err) {
       console.warn('Dashboard data fetch note:', err);
     } finally {

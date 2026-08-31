@@ -110,12 +110,23 @@ export const AdsProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   useEffect(() => {
+    // 1. If we have cached ads, apply immediately (0 reads)
     const cached = cacheService.get<AdSettingsData>(CACHE_KEYS.ADS);
     if (cached) {
       applyAds(cached);
-    } else if (navigator.onLine) {
-      fetchAdsSettings();
     }
+
+    // 2. Listen for real-time 1-read snapshot broadcasts from AppsProvider or Admin
+    const handleAdsUpdated = (e: any) => {
+      if (e.detail) {
+        applyAds(e.detail as Partial<AdSettingsData>);
+      }
+    };
+    window.addEventListener('appflex-ads-updated', handleAdsUpdated);
+
+    return () => {
+      window.removeEventListener('appflex-ads-updated', handleAdsUpdated);
+    };
   }, []);
 
   const updateAdSettings = async (newSettings: Partial<AdSettingsData>) => {

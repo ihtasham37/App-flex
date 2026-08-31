@@ -102,14 +102,23 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   useEffect(() => {
-    // 1. If we have cached settings, apply title immediately
+    // 1. If we have cached settings, apply title immediately (0 reads)
     const cached = cacheService.get<AppSettings>(CACHE_KEYS.SETTINGS);
     if (cached) {
       applySettings(cached);
-    } else if (navigator.onLine) {
-      // 2. Fetch once only if cache is completely absent
-      fetchSettings();
     }
+
+    // 2. Listen for real-time 1-read snapshot broadcasts from AppsProvider or Admin
+    const handleSettingsUpdated = (e: any) => {
+      if (e.detail) {
+        applySettings(e.detail as AppSettings);
+      }
+    };
+    window.addEventListener('appflex-settings-updated', handleSettingsUpdated);
+
+    return () => {
+      window.removeEventListener('appflex-settings-updated', handleSettingsUpdated);
+    };
   }, []);
 
   const updateSettings = async (newSettings: Partial<AppSettings>) => {
