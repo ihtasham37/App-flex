@@ -10,9 +10,11 @@ import {
   Save, ArrowLeft, Smartphone, Star, Film, Layers, Monitor
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useApps } from '../../context/AppsContext';
 import { rebuildAndSyncCatalog } from '../../lib/catalogSync';
 
 export default function AdminEditApp() {
+  const { apps: ctxApps, categories: ctxCategories } = useApps();
   const { appId } = useParams<{ appId: string }>();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -41,20 +43,19 @@ export default function AdminEditApp() {
   const [screenshots, setScreenshots] = useState<string[]>(['', '', '', '']);
 
   useEffect(() => {
-    // Real-time categories
-    const unsub = onSnapshot(collection(db, 'categories'), (snap) => {
-      setCategories(snap.docs.map(d => ({ id: d.id, ...d.data() as { name: string; mainType?: string } })));
-    });
-    return () => unsub();
-  }, []);
+    // 0 reads - using context categories
+    setCategories(ctxCategories);
+  }, [ctxCategories]);
 
   useEffect(() => {
     async function fetchData() {
       if (!appId) return;
       try {
-        const appSnap = await getDoc(doc(db, 'apps', appId));
-        if (appSnap.exists()) {
-          const data = appSnap.data();
+        // 0 reads - get from context instead of getDoc
+        const contextApp = ctxApps.find(a => a.id === appId);
+        
+        if (contextApp) {
+          const data = contextApp as any;
           const rawCat = data.category || '';
           const matchedCat = categories.find(c => c.id === rawCat || c.name?.toLowerCase().trim() === rawCat.toLowerCase().trim());
           const resolvedCategory = matchedCat ? matchedCat.name : rawCat;

@@ -11,8 +11,10 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { rebuildAndSyncCatalog } from '../../lib/catalogSync';
+import { useApps } from '../../context/AppsContext';
 
 export default function AdminApps() {
+  const { apps, categories: ctxCategories } = useApps();
   const [items, setItems] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -20,28 +22,16 @@ export default function AdminApps() {
   const [typeFilter, setTypeFilter] = useState<'all' | 'app' | 'bundle' | 'pc'>('all');
 
   useEffect(() => {
-    // Fetch categories for name mapping
-    const fetchCats = async () => {
-      const snap = await getDocs(collection(db, 'categories'));
-      setCategories(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    };
-    fetchCats();
-
-    // Real-time live catalog listener
-    const unsub = onSnapshot(collection(db, 'apps'), (snap) => {
-      setItems(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setLoading(false);
-    }, (error) => {
-      console.error("Error fetching items real-time:", error);
-      setLoading(false);
-    });
-
-    return () => unsub();
-  }, []);
+    // 0 Reads! Uses unified context snapshot
+    setItems(apps);
+    // Categories are also provided by useApps context!
+    // No getDocs or onSnapshot used here!
+    setLoading(false);
+  }, [apps]);
 
   const getCategoryName = (catId: string) => {
     if (!catId) return 'General';
-    const cat = categories.find(c => c.id === catId || c.name?.toLowerCase().trim() === catId?.toLowerCase().trim());
+    const cat = ctxCategories.find(c => c.id === catId || c.name?.toLowerCase().trim() === catId?.toLowerCase().trim());
     return cat ? cat.name : catId;
   };
 

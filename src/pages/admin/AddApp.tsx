@@ -10,9 +10,11 @@ import {
   Save, ArrowLeft, Smartphone, Star, Film, Layers, Monitor
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useApps } from '../../context/AppsContext';
 import { rebuildAndSyncCatalog } from '../../lib/catalogSync';
 
 export default function AdminAddApp() {
+  const { categories: ctxCategories } = useApps();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -40,13 +42,9 @@ export default function AdminAddApp() {
   const [screenshots, setScreenshots] = useState<string[]>(['', '', '', '']);
 
   useEffect(() => {
-    // Real-time listener for categories
-    const unsub = onSnapshot(collection(db, 'categories'), (snap) => {
-      const cats = snap.docs.map(doc => ({ id: doc.id, ...doc.data() as { name: string; mainType?: string } }));
-      setCategories(cats);
-    });
-    return () => unsub();
-  }, []);
+    // 0 reads - using context categories
+    setCategories(ctxCategories);
+  }, [ctxCategories]);
 
   // Filter categories matching the selected itemType
   const availableCategories = categories.filter(c => (c.mainType || 'app') === formData.itemType);

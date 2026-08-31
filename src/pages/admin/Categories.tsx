@@ -7,9 +7,11 @@ import { Input } from '../../components/ui/Input';
 import { Tag, Plus, Trash2, Smartphone, Film, Layers, Monitor, FileText, Save, CheckCircle2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { rebuildAndSyncCatalog } from '../../lib/catalogSync';
+import { useApps } from '../../context/AppsContext';
 import { useSettings } from '../../context/SettingsContext';
 
 export default function AdminCategories() {
+  const { categories: ctxCategories } = useApps();
   const { settings, updateSettings } = useSettings();
   const [categories, setCategories] = useState<any[]>([]);
   const [newCategory, setNewCategory] = useState('');
@@ -26,21 +28,10 @@ export default function AdminCategories() {
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   useEffect(() => {
-    if (settings) {
-      setDescApps(settings.defaultAppsDescription || 'Discover and download official premium Android applications with 100% security, high speed servers, and lifetime updates on APPFLEX.');
-      setDescPC(settings.defaultPCAppsDescription || 'Download full-version desktop software, PC utilities, Windows productivity tools, and creative applications for maximum performance on APPFLEX.');
-      setDescBundles(settings.defaultBundlesDescription || 'Download premium video editing packs, Lightroom presets, Premiere Pro templates, cinematic LUTs, overlays, and sound FX bundles on APPFLEX.');
-    }
-  }, [settings]);
-
-  useEffect(() => {
-    // Real-time updates for categories
-    const unsub = onSnapshot(collection(db, 'categories'), (snap) => {
-      setCategories(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setLoading(false);
-    });
-    return () => unsub();
-  }, []);
+    // 0 reads - using unified context snapshot
+    setCategories(ctxCategories);
+    setLoading(false);
+  }, [ctxCategories]);
 
   const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();

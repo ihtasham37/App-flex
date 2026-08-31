@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { rebuildAndSyncCatalog } from '../../lib/catalogSync';
+import { useApps } from '../../context/AppsContext';
 
 interface SavedAppRecord {
   savedDocId: string;
@@ -25,6 +26,7 @@ interface SavedAppRecord {
 }
 
 export default function AdminSavedApps() {
+  const { apps: ctxApps, categories: ctxCategories } = useApps();
   const { user } = useAuth();
   const [savedItems, setSavedItems] = useState<SavedAppRecord[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
@@ -35,50 +37,26 @@ export default function AdminSavedApps() {
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
-    // 1. Fetch categories
-    const unsubCats = onSnapshot(collection(db, 'categories'), (snap) => {
-      setCategories(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-
+    setCategories(ctxCategories);
     if (!user) {
       setLoading(false);
-      return () => unsubCats();
+      return;
     }
 
-    // 2. Real-time listener for current Admin's saved apps
-    const q = query(
-      collection(db, 'saved_apps'),
-      where('userId', '==', user.uid)
-    );
+    import('firebase/firestore').then(({ getDocs, query, where, collection }) => {
+      const q = query(collection(db, 'saved_apps'), where('userId', '==', user.uid));
+      getDocs(q).then((savedSnap) => {
+        const savedDocs = savedSnap.docs.map(d => ({
+          savedDocId: d.id,
+          appId: d.data().appId,
+          savedAt: d.data().savedAt,
+          fallbackData: d.data()
+        }));
 
-    let unsubApps: (() => void) | null = null;
-
-    const unsubSaved = onSnapshot(q, (savedSnap) => {
-      const savedDocs = savedSnap.docs.map(d => ({
-        savedDocId: d.id,
-        appId: d.data().appId,
-        savedAt: d.data().savedAt,
-        fallbackData: d.data()
-      }));
-
-      if (savedDocs.length === 0) {
-        setSavedItems([]);
-        setLoading(false);
-        if (unsubApps) {
-          unsubApps();
-          unsubApps = null;
-        }
-        return;
-      }
-
-      // Real-time listener for the apps collection to keep saved apps fully live
-      if (unsubApps) unsubApps();
-      
-      unsubApps = onSnapshot(collection(db, 'apps'), (appsSnap) => {
         const appsMap = new Map();
-        appsSnap.docs.forEach(d => appsMap.set(d.id, { id: d.id, ...d.data() }));
+        ctxApps.forEach(d => appsMap.set(d.id, d));
 
-        const combined: SavedAppRecord[] = savedDocs.map(item => {
+        const combined = savedDocs.map(item => {
           const liveApp = appsMap.get(item.appId);
           return {
             savedDocId: item.savedDocId,
@@ -99,18 +77,12 @@ export default function AdminSavedApps() {
 
         setSavedItems(combined);
         setLoading(false);
+      }).catch(err => {
+        console.error(err);
+        setLoading(false);
       });
-    }, (err) => {
-      console.error("Error listening to saved apps:", err);
-      setLoading(false);
     });
-
-    return () => {
-      unsubCats();
-      unsubSaved();
-      if (unsubApps) unsubApps();
-    };
-  }, [user]);
+  }, [user, ctxApps, ctxCategories]);
 
   const getCategoryName = (catId: string) => {
     if (!catId) return 'General';

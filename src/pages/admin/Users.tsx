@@ -14,17 +14,17 @@ export default function AdminUsers() {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   useEffect(() => {
-    // Real-time live listener for all users
-    const q = query(collection(db, 'users'));
-    const unsub = onSnapshot(q, (snap) => {
-      setUsers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setLoading(false);
-    }, (error) => {
-      console.error("Error fetching users real-time:", error);
-      setLoading(false);
+    // Load max 100 users once to prevent massive read costs
+    import('firebase/firestore').then(({ getDocs, limit, query, collection, orderBy }) => {
+      const q = query(collection(db, 'users'), limit(100)); // optionally orderBy('createdAt', 'desc') if index exists
+      getDocs(q).then((snap) => {
+        setUsers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        setLoading(false);
+      }).catch((error) => {
+        console.error("Error fetching users:", error);
+        setLoading(false);
+      });
     });
-
-    return () => unsub();
   }, []);
 
   // Close menu when clicking outside
