@@ -65,57 +65,124 @@ function AppContent() {
     window.matchMedia('(display-mode: minimal-ui)').matches || 
     (window.navigator as any).standalone === true;
 
-  // Initialize from localStorage synchronously to eliminate the 1-second loading blink
+  // Initialize state strictly
   const [isActuallyInstalled, setIsActuallyInstalled] = useState<boolean>(() => {
     if (isStandalone || isAndroidWebView || isCapacitorOrNative || isAndroidTWA || isUrlAppFlag) return true;
     if (typeof window !== 'undefined') {
-      const hasFlag = localStorage.getItem('pwa_installed') === 'true';
-      const lastSeen = parseInt(localStorage.getItem('pwa_last_seen') || '0', 10);
-      const sevenDays = 7 * 24 * 60 * 60 * 1000;
-      if (hasFlag && (Date.now() - lastSeen < sevenDays)) return true;
+      const isPermanentlyInstalled = localStorage.getItem('pwa_installed_permanent') === 'true';
+      return isPermanentlyInstalled;
     }
     return false;
   });
 
   useEffect(() => {
-    const checkInstallation = async () => {
-      // 1. Standalone mode check (Most reliable)
-      if (isStandalone || isAndroidWebView || isCapacitorOrNative || isAndroidTWA || isUrlAppFlag) {
-        localStorage.setItem('pwa_installed', 'true');
-        localStorage.setItem('pwa_last_seen', Date.now().toString());
-        setIsActuallyInstalled(true);
+    let isMounted = true;
+
+    const performStrictInstallCheck = async () => {
+      // 1. If currently running in standalone / app mode / TWA / WebView / ?app=true
+      const currentStandalone = 
+        window.matchMedia('(display-mode: standalone)').matches || 
+        window.matchMedia('(display-mode: fullscreen)').matches || 
+        window.matchMedia('(display-mode: minimal-ui)').matches || 
+        (window.navigator as any).standalone === true ||
+        window.location.search.includes('app=true') ||
+        window.location.search.includes('mode=app') ||
+        document.referrer.includes('android-app://') ||
+        /wv|WebView|Android.*Version\/[0-9]/i.test(navigator.userAgent || '');
+
+      if (currentStandalone) {
+        try {
+          localStorage.setItem('pwa_installed_permanent', 'true');
+          localStorage.setItem('pwa_installed', 'true');
+          localStorage.setItem('pwa_last_seen', Date.now().toString());
+        } catch {}
+        if (isMounted) setIsActuallyInstalled(true);
         return;
       }
 
-      // 2. Direct check via API if available (only if not in iframe)
+      // 2. Hardware / Device Level Check via getInstalledRelatedApps API
       const isInIframe = window.self !== window.top;
       if (!isInIframe && 'getInstalledRelatedApps' in navigator) {
         try {
           const relatedApps = await (navigator as any).getInstalledRelatedApps();
-          if (relatedApps && relatedApps.length > 0) {
-            setIsActuallyInstalled(true);
-            localStorage.setItem('pwa_installed', 'true');
-            localStorage.setItem('pwa_last_seen', Date.now().toString());
-            return;
+          if (Array.isArray(relatedApps)) {
+            if (relatedApps.length > 0) {
+              // App is strictly installed on this device
+              try {
+                localStorage.setItem('pwa_installed_permanent', 'true');
+                localStorage.setItem('pwa_installed', 'true');
+                localStorage.setItem('pwa_last_seen', Date.now().toString());
+              } catch {}
+              if (isMounted) setIsActuallyInstalled(true);
+              return;
+            } else {
+              // App is NOT installed on device (or was uninstalled) -> Force landing page
+              try {
+                localStorage.removeItem('pwa_installed');
+                localStorage.removeItem('pwa_installed_permanent');
+              } catch {}
+              if (isMounted) setIsActuallyInstalled(false);
+              return;
+            }
           }
         } catch (e) {
-          console.warn("getInstalledRelatedApps check note:", e);
+          console.warn('[PWA Strict Watchdog] getInstalledRelatedApps note:', e);
         }
       }
 
-      // 3. Browser check with time limit (7 days)
-      const hasFlag = localStorage.getItem('pwa_installed') === 'true';
-      const lastSeen = parseInt(localStorage.getItem('pwa_last_seen') || '0', 10);
-      const sevenDays = 7 * 24 * 60 * 60 * 1000;
-      
-      if (hasFlag && (Date.now() - lastSeen < sevenDays)) {
-        setIsActuallyInstalled(true);
-      } else {
-        setIsActuallyInstalled(false);
+      // 3. Fallback verification for browsers without getInstalledRelatedApps
+      const isPermanentlyInstalled = localStorage.getItem('pwa_installed_permanent') === 'true';
+      if (isMounted) {
+        setIsActuallyInstalled(isPermanentlyInstalled);
       }
     };
 
-    checkInstallation();
+    // Run immediately on load
+    performStrictInstallCheck();
+
+    // Continuous Watchdog Event Listeners (Triggers whenever user returns to browser/tab or changes app state)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        performStrictInstallCheck();
+      }
+    };
+
+    const handleFocus = () => {
+      performStrictInstallCheck();
+    };
+
+    const handleAppInstalled = () => {
+      try {
+        localStorage.setItem('pwa_installed_permanent', 'true');
+        localStorage.setItem('pwa_installed', 'true');
+        localStorage.setItem('pwa_last_seen', Date.now().toString());
+      } catch {}
+      if (isMounted) setIsActuallyInstalled(true);
+    };
+
+    const displayModeMediaQuery = window.matchMedia('(display-mode: standalone)');
+    const handleDisplayModeChange = () => {
+      performStrictInstallCheck();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('appinstalled', handleAppInstalled);
+    window.addEventListener('pwa-prompt-available', performStrictInstallCheck);
+    if (displayModeMediaQuery.addEventListener) {
+      displayModeMediaQuery.addEventListener('change', handleDisplayModeChange);
+    }
+
+    return () => {
+      isMounted = false;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+      window.removeEventListener('pwa-prompt-available', performStrictInstallCheck);
+      if (displayModeMediaQuery.removeEventListener) {
+        displayModeMediaQuery.removeEventListener('change', handleDisplayModeChange);
+      }
+    };
   }, [isStandalone, isAndroidWebView, isCapacitorOrNative, isAndroidTWA, isUrlAppFlag]);
 
   // Auth and settings have instant memory fallback so no screen flash

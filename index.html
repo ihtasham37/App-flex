@@ -19,6 +19,21 @@
     <meta name="twitter:card" content="summary_large_image" />
     <!-- Google AdSense Code -->
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6361079932409918" crossorigin="anonymous"></script>
+    <script>
+      window.deferredPrompt = null;
+      window.addEventListener('beforeinstallprompt', function(e) {
+        e.preventDefault();
+        window.deferredPrompt = e;
+        window.dispatchEvent(new CustomEvent('pwa-prompt-available'));
+      });
+      window.addEventListener('appinstalled', function() {
+        try {
+          localStorage.setItem('pwa_installed', 'true');
+          localStorage.setItem('pwa_installed_permanent', 'true');
+          localStorage.setItem('pwa_last_seen', Date.now().toString());
+        } catch(e) {}
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>

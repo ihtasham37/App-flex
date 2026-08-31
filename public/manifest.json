@@ -2,7 +2,7 @@
   "name": "APPFLEX",
   "short_name": "APPFLEX",
   "description": "Discover, explore, and download top Android apps, games, PC softs, and bundles.",
-  "start_url": "/",
+  "start_url": "/?app=true",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
