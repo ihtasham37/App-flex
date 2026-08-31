@@ -18,6 +18,8 @@ export interface SearchableItem {
   itemType?: 'app' | 'bundle' | 'pc' | 'game';
   status?: string;
   downloadUrl?: string;
+  createdAt?: any;
+  updatedAt?: any;
 }
 
 export interface SearchOptions {

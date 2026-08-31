@@ -178,7 +178,7 @@ export default function AppDetails() {
         const cachedOrFetched = await getAppById(appId);
         
         if (cachedOrFetched) {
-          setApp(cachedOrFetched as AppData);
+          setApp(cachedOrFetched as unknown as AppData);
           
           if (user) {
             const savedQuery = query(

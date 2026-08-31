@@ -233,7 +233,7 @@ export default function Bundles() {
                         </div>
                         {showAdAfter && (
                           <div className="pt-2">
-                            <AdSlot page="bundle" slotIndex={Math.floor((lineIdx + 1) / adInterval) - 1} pageVisitId={pageVisitId} />
+                            <AdSlot page="bundles" slotIndex={Math.floor((lineIdx + 1) / adInterval) - 1} pageVisitId={pageVisitId} />
                           </div>
                         )}
                       </React.Fragment>
@@ -280,7 +280,7 @@ export default function Bundles() {
 
                           {showAdAfter && (
                             <div className="pt-2">
-                              <AdSlot page="bundle" slotIndex={Math.floor(currentGlobalCount / adInterval) - 1} pageVisitId={pageVisitId} />
+                              <AdSlot page="bundles" slotIndex={Math.floor(currentGlobalCount / adInterval) - 1} pageVisitId={pageVisitId} />
                             </div>
                           )}
                         </React.Fragment>

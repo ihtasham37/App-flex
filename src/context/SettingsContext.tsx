@@ -9,11 +9,14 @@ export interface AppSettings {
   version: string;
   updateBanner?: {
     enabled: boolean;
-    title: string;
-    description: string;
-    buttonText: string;
-    buttonUrl: string;
-    version: string;
+    title?: string;
+    heading?: string;
+    description?: string;
+    buttonText?: string;
+    buttonUrl?: string;
+    link?: string;
+    version?: string;
+    image?: string;
   };
   enableComments?: boolean;
   enableRatings?: boolean;
@@ -22,6 +25,13 @@ export interface AppSettings {
   codeReleaseVersion?: number;
   codeReleaseNote?: string;
   autoReloadClients?: boolean;
+  whatsappChannel?: string;
+  telegramLink?: string;
+  supportEmail?: string;
+  supportWhatsapp?: string;
+  defaultAppsDescription?: string;
+  defaultPCAppsDescription?: string;
+  defaultBundlesDescription?: string;
 }
 
 interface SettingsContextType {

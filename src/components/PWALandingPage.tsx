@@ -111,10 +111,18 @@ export const PWALandingPage: React.FC = () => {
                 {installing ? 'Installing...' : 'Install App Now'}
               </Button>
 
-              <div className="p-3 bg-blue-50/70 border border-blue-100 rounded-2xl text-left">
-                <p className="text-xs font-semibold text-slate-600 leading-relaxed">
-                  <span className="font-bold text-blue-600">Note:</span> If the app does not install automatically, tap your browser menu (<span className="font-bold text-slate-800">3 dots</span> at top right) and select <span className="font-bold text-blue-600">"Install app"</span> or <span className="font-bold text-blue-600">"Add to Home Screen"</span>.
-                </p>
+              <div className="pt-2 flex flex-col items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    localStorage.setItem('pwa_installed', 'true');
+                    localStorage.setItem('pwa_last_seen', Date.now().toString());
+                    window.location.reload();
+                  }}
+                  className="text-xs font-bold text-slate-500 hover:text-blue-600 underline underline-offset-4 py-1"
+                >
+                  Continue to Web Store →
+                </button>
               </div>
             </>
           )}

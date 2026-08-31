@@ -8,7 +8,7 @@ interface AppData {
   id: string;
   name: string;
   mainImage: string;
-  rating: number;
+  rating?: number | string;
   category: string;
 }
 

@@ -4,32 +4,15 @@ import { Star, Film, ArrowRight, ShieldCheck, Smartphone, Monitor, Search as Sea
 import { Link } from 'react-router-dom';
 import { cn, isAppItem, isBundleItem, isPCItem } from '../lib/utils';
 import { useSettings } from '../context/SettingsContext';
-import { useApps } from '../context/AppsContext';
+import { useApps, AppItemData } from '../context/AppsContext';
 import { AdSlot } from '../components/ads/AdSlot';
 import { SEO } from '../components/SEO';
-
-interface AppData {
-  id: string;
-  name: string;
-  category: string;
-  developer?: string;
-  mainImage: string;
-  shortDescription?: string;
-  fullDescription?: string;
-  appNumber?: string;
-  rating?: number | string;
-  version?: string;
-  size?: string;
-  status?: string;
-  itemType?: 'app' | 'bundle' | 'pc';
-  showOnBanner?: boolean;
-}
 
 interface HomeLine {
   key: string;
   type: 'app' | 'bundle' | 'pc';
   title: string;
-  items: AppData[];
+  items: AppItemData[];
   seeAllPath: string;
 }
 
@@ -40,7 +23,7 @@ export default function Home() {
   const [pageVisitId] = useState(() => Math.random().toString(36).substring(2, 9));
 
   // Compute banner apps stably
-  const bannerApps = useMemo<AppData[]>(() => {
+  const bannerApps = useMemo<AppItemData[]>(() => {
     if (!apps || apps.length === 0) return [];
     const banners = apps.filter(item => item.isBanner || (item as any).showOnBanner);
     return banners.length > 0 ? banners : apps.slice(0, 5);
@@ -54,8 +37,8 @@ export default function Home() {
     const bundlesOnly = apps.filter(isBundleItem);
     const pcOnly = apps.filter(isPCItem);
 
-    const groupItems = (items: AppData[]) => {
-      const groups: { [cat: string]: AppData[] } = {};
+    const groupItems = (items: AppItemData[]) => {
+      const groups: { [cat: string]: AppItemData[] } = {};
       items.forEach(item => {
         const cat = getCategoryName(item.category);
         if (!groups[cat]) groups[cat] = [];
@@ -155,7 +138,7 @@ export default function Home() {
   const renderHomeLine = (
     type: 'app' | 'bundle' | 'pc',
     title: string,
-    items: AppData[],
+    items: AppItemData[],
     seeAllPath: string
   ) => {
     if (!items || items.length === 0) return null;
