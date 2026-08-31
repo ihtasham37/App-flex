@@ -60,6 +60,7 @@ interface AdsContextType {
   updateSingleAd: (adKey: keyof AdSettingsData['ads'], adData: Partial<AdItem>) => Promise<void>;
   getNormalAdForIndex: (page: AdPageType, slotIndex: number, pageVisitId?: string) => AdItem | null;
   getRewardedAd: () => AdItem | null;
+  isRewardedAdsEnabled: () => boolean;
   isPageAdsEnabled: (page: AdPageType) => boolean;
   fetchAdsSettings: () => Promise<void>;
 }
@@ -186,6 +187,12 @@ export const AdsProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return null;
   };
 
+  const isRewardedAdsEnabled = (): boolean => {
+    if (!adSettings.global_ads_enabled) return false;
+    const ad = adSettings.ads.ad_rewarded;
+    return Boolean(ad && ad.enabled && ad.ad_code && ad.ad_code.trim().length > 0);
+  };
+
   return (
     <AdsContext.Provider value={{
       adSettings,
@@ -194,6 +201,7 @@ export const AdsProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updateSingleAd,
       getNormalAdForIndex,
       getRewardedAd,
+      isRewardedAdsEnabled,
       isPageAdsEnabled,
       fetchAdsSettings
     }}>

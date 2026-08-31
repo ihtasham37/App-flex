@@ -1,31 +1,17 @@
 /*
-  X-Frame-Options: SAMEORIGIN
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
 
-/assets/*
-  Cache-Control: public, max-age=31536000, immutable
+# Never cache Service Worker or Web Manifest so live PWA updates trigger immediately
+/sw.js
+  Cache-Control: no-cache, no-store, must-revalidate
+/manifest.json
+  Cache-Control: no-cache, no-store, must-revalidate
 
-/*.js
-  Cache-Control: public, max-age=31536000, immutable
-
-/*.css
-  Cache-Control: public, max-age=31536000, immutable
-
-/*.png
-  Cache-Control: public, max-age=31536000, immutable
-
-/*.jpg
-  Cache-Control: public, max-age=31536000, immutable
-
-/*.svg
-  Cache-Control: public, max-age=31536000, immutable
-
-/*.webp
-  Cache-Control: public, max-age=31536000, immutable
-
-/*.woff2
-  Cache-Control: public, max-age=31536000, immutable
-
+# Single Page App index.html should always revalidate
 /index.html
   Cache-Control: public, max-age=0, must-revalidate
+
+# Static Assets and Bundles (hashed by Vite)
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
