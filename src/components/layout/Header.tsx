@@ -6,8 +6,7 @@ import { Button } from '../ui/Button';
 import { AppLogo } from '../ui/AppLogo';
 import { SearchModal } from '../SearchModal';
 import { Bookmark, Search, MessageCircle } from 'lucide-react';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import { getLocalSavedAppIds } from '../../lib/savedApps';
 
 export const Header = () => {
   const { user, profile } = useAuth();
@@ -37,24 +36,26 @@ export const Header = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isSearchOpen]);
 
-  // Fetch saved count for user (one-time on login, no continuous listeners)
+  // Read saved count for user (0 FIRESTORE READS)
   useEffect(() => {
     if (!user) {
       setSavedCount(0);
       return;
     }
-    let isMounted = true;
-    const fetchSaved = async () => {
-      try {
-        const q = query(collection(db, 'saved_apps'), where('userId', '==', user.uid));
-        const snap = await getDocs(q);
-        if (isMounted) setSavedCount(snap.size);
-      } catch (err) {
-        console.warn('Saved count note:', err);
+    
+    // 0 Reads: Local fast retrieval
+    const initialIds = getLocalSavedAppIds(user.uid);
+    setSavedCount(initialIds.length);
+
+    const handleSavedChange = (e: any) => {
+      if (typeof e.detail?.count === 'number') {
+        setSavedCount(e.detail.count);
       }
     };
-    fetchSaved();
-    return () => { isMounted = false; };
+    window.addEventListener('appflex-saved-apps-changed', handleSavedChange);
+    return () => {
+      window.removeEventListener('appflex-saved-apps-changed', handleSavedChange);
+    };
   }, [user?.uid]);
 
   const isHome = location.pathname === '/';

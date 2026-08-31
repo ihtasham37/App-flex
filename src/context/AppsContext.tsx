@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { cacheService, CACHE_KEYS } from '../lib/cacheService';
 
@@ -93,6 +93,11 @@ export const AppsProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Propagate settings & ads to cache and trigger events so other providers do NOT make separate reads!
           if (data.settings) {
             await cacheService.set(CACHE_KEYS.SETTINGS, data.settings);
+            // Sync code release version immediately so user is on latest code on first install without extra update prompts!
+            if (data.settings.codeReleaseVersion) {
+              localStorage.setItem('appflex_client_code_version', data.settings.codeReleaseVersion.toString());
+              cacheService.set(CACHE_KEYS.CLIENT_CODE_VERSION, data.settings.codeReleaseVersion);
+            }
             if (typeof window !== 'undefined') {
               window.dispatchEvent(new CustomEvent('appflex-settings-updated', { detail: data.settings }));
             }

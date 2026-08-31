@@ -8,12 +8,12 @@ import {
   LogOut, Download, Heart, ChevronRight, ShieldCheck,
   MessageCircle, MessageSquare, Send
 } from 'lucide-react';
-import { auth, db } from '../lib/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { auth } from '../lib/firebase';
 import { signOut } from 'firebase/auth';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSettings } from '../context/SettingsContext';
 import { AdSlot } from '../components/ads/AdSlot';
+import { getLocalSavedAppIds } from '../lib/savedApps';
 
 export default function Profile() {
   const { user, profile, isAdmin } = useAuth();
@@ -21,25 +21,13 @@ export default function Profile() {
   const navigate = useNavigate();
 
   const [savedCount, setSavedCount] = useState<number>(0);
-  const [loadingStats, setLoadingStats] = useState<boolean>(true);
+  const [loadingStats, setLoadingStats] = useState<boolean>(false);
 
   useEffect(() => {
     if (!user) return;
-    let isMounted = true;
-    const fetchSaved = async () => {
-      try {
-        const snap = await getDocs(query(collection(db, 'saved_apps'), where('userId', '==', user.uid)));
-        if (isMounted) {
-          setSavedCount(snap.size);
-          setLoadingStats(false);
-        }
-      } catch (err) {
-        console.warn('Could not fetch user saved count:', err);
-        if (isMounted) setLoadingStats(false);
-      }
-    };
-    fetchSaved();
-    return () => { isMounted = false; };
+    const ids = getLocalSavedAppIds(user.uid);
+    setSavedCount(ids.length);
+    setLoadingStats(false);
   }, [user]);
 
   const handleLogout = async () => {

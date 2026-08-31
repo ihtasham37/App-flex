@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { cacheService, CACHE_KEYS } from '../lib/cacheService';
 
@@ -99,14 +99,9 @@ export const AdsProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const fetchAdsSettings = async () => {
-    try {
-      const snap = await getDoc(doc(db, 'settings', 'ads'));
-      if (snap.exists()) {
-        applyAds(snap.data() as Partial<AdSettingsData>);
-      }
-    } catch (error) {
-      console.warn('[AdsProvider] Ads fetch note:', error);
-    }
+    // 0 Reads: Handled automatically by AppsProvider 1-Read Catalog
+    const cached = cacheService.get<AdSettingsData>(CACHE_KEYS.ADS);
+    if (cached) applyAds(cached);
   };
 
   useEffect(() => {

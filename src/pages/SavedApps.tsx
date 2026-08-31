@@ -1,12 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, where, getDocs, deleteDoc, doc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useApps } from '../context/AppsContext';
 import { GlassCard } from '../components/ui/GlassCard';
 import { Button } from '../components/ui/Button';
 import { Heart, Trash2, ExternalLink, Package } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { getLocalSavedAppIds, toggleLocalSavedApp } from '../lib/savedApps';
 
 export default function SavedApps() {
   const { user } = useAuth();
@@ -15,57 +14,50 @@ export default function SavedApps() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchSaved() {
-      if (!user) return;
+    function loadSaved() {
+      if (!user) {
+        setSaved([]);
+        setLoading(false);
+        return;
+      }
       try {
-        const q = query(
-          collection(db, 'saved_apps'),
-          where('userId', '==', user.uid)
-        );
-        const snap = await getDocs(q);
-        
-        if (snap.empty) {
-          setSaved([]);
-          setLoading(false);
-          return;
-        }
-
+        const savedIds = getLocalSavedAppIds(user.uid);
         const appsMap = new Map();
         apps.forEach(a => appsMap.set(a.id, a));
 
-        setSaved(snap.docs.map(d => {
-          const data = d.data();
-          const localApp = appsMap.get(data.appId) || {
-            id: data.appId,
-            name: data.appName || 'Unknown App',
-            mainImage: data.appImage || '',
-            category: data.category || 'General',
-            rating: data.rating || 4.5,
-            itemType: data.itemType || 'app'
+        const savedList = savedIds.map(appId => {
+          const app = appsMap.get(appId) || {
+            id: appId,
+            name: 'App',
+            mainImage: '',
+            category: 'General',
+            rating: 4.5,
+            itemType: 'app'
           };
           return {
-            id: d.id,
-            app: localApp,
-            ...data
+            id: appId,
+            app,
+            appId,
+            appName: app.name,
+            appImage: app.mainImage || app.icon
           };
-        }));
+        });
 
+        setSaved(savedList);
       } catch (error) {
-        console.error("Error fetching saved apps:", error);
+        console.error("Error loading saved apps:", error);
       } finally {
         setLoading(false);
       }
     }
-    fetchSaved();
+
+    loadSaved();
   }, [user, apps]);
 
-  const removeSaved = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'saved_apps', id));
-      setSaved(saved.filter(s => s.id !== id));
-    } catch (error) {
-      console.error("Error removing saved app:", error);
-    }
+  const removeSaved = async (appId: string) => {
+    if (!user) return;
+    toggleLocalSavedApp(user.uid, appId);
+    setSaved(prev => prev.filter(s => s.appId !== appId && s.id !== appId));
   };
 
   return (

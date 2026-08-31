@@ -95,11 +95,29 @@ export default function AdminApps() {
           <h1 className="text-2xl font-black text-slate-900">Content & App Management</h1>
           <p className="text-xs text-slate-500 font-medium mt-0.5">Manage Apps, PC Software, and Video Bundles in one unified console.</p>
         </div>
-        <Link to="/admin/apps/new">
-          <Button variant="gradient" className="shadow-md shadow-blue-500/20 text-xs font-bold h-10 px-4 rounded-xl">
-            <Plus size={16} className="mr-1.5" /> Add App / PC / Bundle
+        <div className="flex items-center gap-2.5">
+          <Button 
+            onClick={async () => {
+              if (window.confirm('Broadcast 1-Click Full System Sync to all users now?')) {
+                try {
+                  await rebuildAndSyncCatalog();
+                  alert('1-Click Sync Successful! Catalog & Code updated into 1-read snapshot.');
+                } catch (e) {
+                  alert('Failed to sync. Please try again.');
+                }
+              }
+            }}
+            variant="outline" 
+            className="border-amber-400 text-amber-700 bg-amber-50 hover:bg-amber-100 text-xs font-black h-10 px-3.5 rounded-xl shadow-xs"
+          >
+            ⚡ 1-Click Sync All
           </Button>
-        </Link>
+          <Link to="/admin/apps/new">
+            <Button variant="gradient" className="shadow-md shadow-blue-500/20 text-xs font-bold h-10 px-4 rounded-xl">
+              <Plus size={16} className="mr-1.5" /> Add App / PC / Bundle
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Main Filter Tabs (All, Apps, Video Bundles, PC) */}

@@ -1,28 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
-import { db } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
 import { GlassCard } from '../components/ui/GlassCard';
 import { Button } from '../components/ui/Button';
 import { Download, Calendar, ExternalLink, Package } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { getLocalDownloads, LocalDownloadRecord } from '../lib/downloadHistory';
 
 export default function Downloads() {
   const { user } = useAuth();
-  const [downloads, setDownloads] = useState<any[]>([]);
+  const [downloads, setDownloads] = useState<LocalDownloadRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchDownloads() {
-      if (!user) return;
+    function fetchDownloads() {
       try {
-        const q = query(
-          collection(db, 'downloads'),
-          where('userId', '==', user.uid),
-          orderBy('downloadedAt', 'desc')
-        );
-        const snap = await getDocs(q);
-        setDownloads(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        const records = getLocalDownloads(user?.uid);
+        setDownloads(records);
       } catch (error) {
         console.error("Error fetching downloads:", error);
       } finally {
@@ -57,7 +50,11 @@ export default function Downloads() {
                 <div className="flex items-center gap-4 mt-1">
                   <div className="flex items-center gap-1.5 text-xs text-gray-400 font-bold">
                     <Calendar size={14} />
-                    {dl.downloadedAt?.toDate().toLocaleDateString()}
+                    {typeof dl.downloadedAt === 'number'
+                      ? new Date(dl.downloadedAt).toLocaleDateString()
+                      : dl.downloadedAt && typeof (dl.downloadedAt as any).toDate === 'function'
+                        ? (dl.downloadedAt as any).toDate().toLocaleDateString()
+                        : new Date().toLocaleDateString()}
                   </div>
                   <div className="flex items-center gap-1.5 text-xs text-blue-600 font-black uppercase tracking-tighter">
                     <Download size={14} />

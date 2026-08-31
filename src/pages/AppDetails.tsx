@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
-import { doc, getDoc, collection, query, where, getDocs, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/Button';
@@ -16,7 +16,9 @@ import { useAds } from '../context/AdsContext';
 import { useApps } from '../context/AppsContext';
 import { AdSlot } from '../components/ads/AdSlot';
 import { RewardedAdModal } from '../components/ads/RewardedAdModal';
-import { getUserTodayDownloadCount, isRewardedDownloadRequired } from '../lib/downloadLimit';
+import { getUserTodayDownloadCount, isRewardedDownloadRequired, incrementUserTodayDownloadCount } from '../lib/downloadLimit';
+import { isAppSavedLocally, toggleLocalSavedApp } from '../lib/savedApps';
+import { saveLocalDownload } from '../lib/downloadHistory';
 
 interface AppData {
   id: string;
@@ -179,15 +181,8 @@ export default function AppDetails() {
         
         if (cachedOrFetched) {
           setApp(cachedOrFetched as unknown as AppData);
-          
           if (user) {
-            const savedQuery = query(
-              collection(db, 'saved_apps'),
-              where('userId', '==', user.uid),
-              where('appId', '==', appId)
-            );
-            const savedSnap = await getDocs(savedQuery);
-            setIsSaved(!savedSnap.empty);
+            setIsSaved(isAppSavedLocally(user.uid, appId));
           }
         } else {
           navigate('/');
@@ -211,31 +206,8 @@ export default function AppDetails() {
 
     setSaving(true);
     try {
-      const savedQuery = query(
-        collection(db, 'saved_apps'),
-        where('userId', '==', user.uid),
-        where('appId', '==', app.id)
-      );
-      const savedSnap = await getDocs(savedQuery);
-
-      if (!savedSnap.empty) {
-        const deletePromises = savedSnap.docs.map(d => deleteDoc(doc(db, 'saved_apps', d.id)));
-        await Promise.all(deletePromises);
-        setIsSaved(false);
-      } else {
-        await addDoc(collection(db, 'saved_apps'), {
-          userId: user.uid,
-          appId: app.id,
-          appName: app.name,
-          appImage: app.mainImage,
-          category: app.category,
-          rating: app.rating || 4.5,
-          version: app.version || '1.0.0',
-          itemType: app.itemType || 'app',
-          savedAt: serverTimestamp()
-        });
-        setIsSaved(true);
-      }
+      const nowSaved = toggleLocalSavedApp(user.uid, app.id);
+      setIsSaved(nowSaved);
     } catch (error) {
       console.error("Save error:", error);
     } finally {
@@ -292,6 +264,14 @@ export default function AppDetails() {
     setDownloading(true);
 
     // 1. Immediately trigger download to retain user activation
+    incrementUserTodayDownloadCount(user.uid);
+    saveLocalDownload(user.uid, {
+      appId: app.id,
+      appName: app.name,
+      appImage: app.mainImage || (app as any).icon || '',
+      downloadUrl: app.downloadUrl,
+      category: app.category || ''
+    });
     triggerDownloadAction(app.downloadUrl);
 
     // 2. Asynchronously record the download without blocking the user

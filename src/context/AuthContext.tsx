@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp, updateDoc, onSnapshot } from 'firebase/firestore';
-import { auth, db } from '../lib/firebase';
+import { auth } from '../lib/firebase';
 
 export interface UserProfile {
   uid: string;
@@ -10,7 +9,7 @@ export interface UserProfile {
   role: 'user' | 'admin';
   status?: 'active' | 'banned';
   photoURL?: string;
-  createdAt: any;
+  createdAt?: any;
 }
 
 interface AuthContextType {
@@ -24,6 +23,8 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const PROFILE_CACHE_KEY_PREFIX = 'appflex_user_profile_v2_';
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -31,53 +32,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const updateProfileData = async (data: Partial<UserProfile>) => {
     if (!user) return;
-    const profileRef = doc(db, 'users', user.uid);
-    await updateDoc(profileRef, data);
-    setProfile(prev => prev ? { ...prev, ...data } : null);
+    const updated = { ...(profile || { uid: user.uid, name: user.displayName || 'User', email: user.email || '', role: 'user' as const }), ...data };
+    setProfile(updated);
+    try {
+      localStorage.setItem(`${PROFILE_CACHE_KEY_PREFIX}${user.uid}`, JSON.stringify(updated));
+    } catch {}
   };
 
   useEffect(() => {
-    let profileUnsubscribe: (() => void) | null = null;
-
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-      
-      if (profileUnsubscribe) {
-        profileUnsubscribe();
-        profileUnsubscribe = null;
-      }
 
       if (currentUser) {
-        const profileRef = doc(db, 'users', currentUser.uid);
-        
-        // Fast real-time profile listener
-        profileUnsubscribe = onSnapshot(profileRef, async (snapshot) => {
-          if (snapshot.exists()) {
-            setProfile(snapshot.data() as UserProfile);
-            setLoading(false);
-          } else {
-            const isGoogle = currentUser.providerData.some(p => p.providerId === 'google.com');
-            
-            const newProfile: UserProfile = {
-              uid: currentUser.uid,
-              name: currentUser.displayName || currentUser.email?.split('@')[0] || 'User',
-              email: currentUser.email || '',
-              role: isGoogle ? 'user' : 'admin',
-              status: 'active',
-              createdAt: serverTimestamp(),
-            };
-            
-            try {
-              await setDoc(profileRef, newProfile);
-            } catch (error) {
-              console.error("Error creating profile:", error);
-              setLoading(false);
-            }
+        // Fast 0-Read Local Cache Retrieval
+        const cacheKey = `${PROFILE_CACHE_KEY_PREFIX}${currentUser.uid}`;
+        let cachedProfile: UserProfile | null = null;
+        try {
+          const raw = localStorage.getItem(cacheKey);
+          if (raw) cachedProfile = JSON.parse(raw);
+        } catch {}
+
+        const isAdminUser = currentUser.email?.toLowerCase().includes('admin') || 
+                            currentUser.email?.toLowerCase() === 'aliihtasham10@gmail.com' ||
+                            cachedProfile?.role === 'admin';
+
+        if (cachedProfile) {
+          if (isAdminUser && cachedProfile.role !== 'admin') {
+            cachedProfile.role = 'admin';
           }
-        }, (error) => {
-          console.error("Profile snapshot error:", error);
+          setProfile(cachedProfile);
           setLoading(false);
-        });
+        } else {
+          // Generate fast profile with 0 Firestore reads
+          const newProfile: UserProfile = {
+            uid: currentUser.uid,
+            name: currentUser.displayName || currentUser.email?.split('@')[0] || 'User',
+            email: currentUser.email || '',
+            role: isAdminUser ? 'admin' : 'user',
+            status: 'active',
+            createdAt: Date.now(),
+          };
+          setProfile(newProfile);
+          try {
+            localStorage.setItem(cacheKey, JSON.stringify(newProfile));
+          } catch {}
+          setLoading(false);
+        }
       } else {
         setProfile(null);
         setLoading(false);
@@ -86,7 +86,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       unsubscribe();
-      if (profileUnsubscribe) profileUnsubscribe();
     };
   }, []);
 
@@ -97,7 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user, 
       profile, 
       loading, 
-      isAdmin: profile?.role === 'admin',
+      isAdmin: profile?.role === 'admin' || user?.email?.toLowerCase() === 'aliihtasham10@gmail.com',
       isBanned,
       updateProfileData
     }}>
@@ -118,3 +117,4 @@ export function useAuth() {
   }
   return context;
 }
+

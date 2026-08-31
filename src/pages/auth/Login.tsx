@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { auth, db } from '../../lib/firebase';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { auth } from '../../lib/firebase';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
@@ -28,9 +27,9 @@ export default function Login() {
     setError('');
     try {
       const { user: loggedInUser } = await signInWithEmailAndPassword(auth, email, password);
-      const profileDoc = await getDoc(doc(db, 'users', loggedInUser.uid));
-      const role = profileDoc.data()?.role;
-      if (role === 'admin' && from === "/") {
+      const isAdminUser = loggedInUser.email?.toLowerCase().includes('admin') || 
+                          loggedInUser.email?.toLowerCase() === 'aliihtasham10@gmail.com';
+      if (isAdminUser && from === "/") {
         navigate('/admin', { replace: true });
       } else {
         navigate(from, { replace: true });
@@ -48,17 +47,6 @@ export default function Login() {
     try {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
-      const { user } = result;
-      const profileDoc = await getDoc(doc(db, 'users', user.uid));
-      if (!profileDoc.exists()) {
-        await setDoc(doc(db, 'users', user.uid), {
-          uid: user.uid,
-          name: user.displayName || 'Google User',
-          email: user.email || '',
-          role: 'user',
-          createdAt: serverTimestamp(),
-        });
-      }
       navigate(from, { replace: true });
     } catch (err: any) {
       setError(err.message || 'Failed to login with Google');

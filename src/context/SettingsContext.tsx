@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { cacheService, CACHE_KEYS } from '../lib/cacheService';
 
@@ -90,15 +90,9 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const fetchSettings = async () => {
-    try {
-      const snap = await getDoc(doc(db, 'settings', 'global'));
-      if (snap.exists()) {
-        const data = snap.data() as AppSettings;
-        applySettings(data);
-      }
-    } catch (e) {
-      console.warn('[SettingsProvider] Settings fetch note:', e);
-    }
+    // 0 Reads: Handled automatically by AppsProvider 1-Read Catalog
+    const cached = cacheService.get<AppSettings>(CACHE_KEYS.SETTINGS);
+    if (cached) applySettings(cached);
   };
 
   useEffect(() => {
