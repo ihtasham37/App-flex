@@ -21,27 +21,41 @@ export default defineConfig(() => {
           globPatterns: ['**/*.{js,css,html,ico,png,svg}']
         },
         manifest: {
+          id: '/',
           name: 'APPFLEX',
           short_name: 'APPFLEX',
           description: 'The premium marketplace to discover, explore and download the best applications, games, PC software and video bundles.',
           theme_color: '#2563eb',
-          background_color: '#ffffff',
+          background_color: '#0f172a',
           display: 'standalone',
           orientation: 'portrait',
           start_url: '/?app=true',
           scope: '/',
+          categories: ['utilities', 'entertainment', 'games'],
           icons: [
             {
               src: '/pwa-192x192.png',
               sizes: '192x192',
               type: 'image/png',
-              purpose: 'any maskable'
+              purpose: 'any'
+            },
+            {
+              src: '/pwa-192x192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'maskable'
             },
             {
               src: '/pwa-512x512.png',
               sizes: '512x512',
               type: 'image/png',
-              purpose: 'any maskable'
+              purpose: 'any'
+            },
+            {
+              src: '/pwa-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'maskable'
             }
           ]
         },

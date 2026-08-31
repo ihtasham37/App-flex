@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Smartphone, ShieldCheck, Gamepad2, CheckCircle2, MoreVertical, PlusSquare, ArrowUpRight } from 'lucide-react';
+import { Download, Smartphone, ShieldCheck, Gamepad2, CheckCircle2, Loader2 } from 'lucide-react';
 import { Button } from './ui/Button';
 import { useSettings } from '../context/SettingsContext';
 import { AppLogo } from './ui/AppLogo';
@@ -9,10 +9,9 @@ export const PWALandingPage: React.FC = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(() => (window as any).deferredPrompt || null);
   const [installedSuccess, setInstalledSuccess] = useState(false);
   const [installing, setInstalling] = useState(false);
-  const [showManualGuide, setShowManualGuide] = useState(false);
 
   useEffect(() => {
-    // Check if already captured in window
+    // Check if already captured in global window
     if ((window as any).deferredPrompt) {
       setDeferredPrompt((window as any).deferredPrompt);
     }
@@ -52,9 +51,19 @@ export const PWALandingPage: React.FC = () => {
   }, []);
 
   const handleInstall = async () => {
-    const promptEvent = deferredPrompt || (window as any).deferredPrompt;
+    setInstalling(true);
+    let promptEvent = deferredPrompt || (window as any).deferredPrompt;
+
+    // If not ready yet, wait briefly for the event listener to catch up
+    if (!promptEvent) {
+      for (let i = 0; i < 6; i++) {
+        await new Promise((res) => setTimeout(res, 200));
+        promptEvent = (window as any).deferredPrompt;
+        if (promptEvent) break;
+      }
+    }
+
     if (promptEvent) {
-      setInstalling(true);
       try {
         await promptEvent.prompt();
         const choice = await promptEvent.userChoice;
@@ -70,13 +79,12 @@ export const PWALandingPage: React.FC = () => {
         }
       } catch (err) {
         console.error("Install prompt error:", err);
-        setShowManualGuide(true);
       } finally {
         setInstalling(false);
       }
     } else {
-      // If browser doesn't expose automatic trigger, show visual step-by-step guide
-      setShowManualGuide(true);
+      // In case the device browser automatically installed or handles it natively
+      setInstalling(false);
     }
   };
 
@@ -137,30 +145,18 @@ export const PWALandingPage: React.FC = () => {
                 disabled={installing}
                 className="w-full h-16 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-lg font-black uppercase tracking-widest shadow-xl shadow-blue-600/40 transition-all active:scale-95 flex items-center justify-center gap-2"
               >
-                <Download size={22} className="stroke-[2.5]" />
-                <span>{installing ? 'Installing...' : 'INSTALL APP NOW'}</span>
+                {installing ? (
+                  <>
+                    <Loader2 size={22} className="animate-spin" />
+                    <span>INSTALLING...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download size={22} className="stroke-[2.5]" />
+                    <span>INSTALL APP NOW</span>
+                  </>
+                )}
               </Button>
-
-              {/* Step-by-step visual guidance if browser requires 3 dots installation */}
-              {showManualGuide && (
-                <div className="p-4 bg-slate-900/90 border border-blue-500/40 rounded-2xl text-left space-y-2 animate-in fade-in zoom-in-95 duration-200">
-                  <div className="flex items-center gap-2 text-blue-400 font-bold text-xs uppercase tracking-wider">
-                    <ArrowUpRight size={16} />
-                    <span>How to Install on Your Device:</span>
-                  </div>
-                  <ol className="text-xs text-slate-300 space-y-1.5 list-decimal list-inside font-medium leading-relaxed">
-                    <li>
-                      Tap browser menu (<MoreVertical size={13} className="inline text-slate-100" /> <span className="text-white font-bold">3 dots</span> at top right)
-                    </li>
-                    <li>
-                      Tap <span className="text-blue-400 font-bold">"Install app"</span> or <span className="text-blue-400 font-bold">"Add to Home screen"</span>
-                    </li>
-                    <li>
-                      Confirm to add <span className="text-white font-bold">{settings.appName || 'APPFLEX'}</span> to your home screen
-                    </li>
-                  </ol>
-                </div>
-              )}
             </div>
           )}
 
