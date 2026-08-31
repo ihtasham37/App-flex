@@ -6,7 +6,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Tag, Plus, Trash2, Smartphone, Film, Layers, Monitor, FileText, Save, CheckCircle2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { cacheService } from '../../lib/cacheService';
+import { rebuildAndSyncCatalog } from '../../lib/catalogSync';
 import { useSettings } from '../../context/SettingsContext';
 
 export default function AdminCategories() {
@@ -54,28 +54,13 @@ export default function AdminCategories() {
         createdAt: serverTimestamp()
       });
 
-      // Rebuild the catalog snapshot for 33k user optimization
+      // Rebuild the unified snapshot
       try {
-        const appsSnap = await getDocs(collection(db, 'apps'));
-        const catsSnap = await getDocs(collection(db, 'categories'));
-        const allApps = appsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        const allCats = catsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        
-        await setDoc(doc(db, 'settings', 'catalog'), {
-          apps: allApps,
-          categories: allCats,
-          updatedAt: serverTimestamp()
-        });
-
-        await updateDoc(doc(db, 'settings', 'global'), {
-          catalogVersion: increment(1),
-          lastCatalogUpdate: Date.now()
-        });
+        await rebuildAndSyncCatalog();
       } catch (err) {
         console.warn('Catalog sync failed:', err);
       }
 
-      cacheService.clearAll();
       setNewCategory('');
     } catch (error) {
       console.error("Error adding category:", error);
@@ -89,28 +74,12 @@ export default function AdminCategories() {
       try {
         await deleteDoc(doc(db, 'categories', id));
         
-        // Rebuild the catalog snapshot for 33k user optimization
+        // Rebuild the unified snapshot
         try {
-          const appsSnap = await getDocs(collection(db, 'apps'));
-          const catsSnap = await getDocs(collection(db, 'categories'));
-          const allApps = appsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-          const allCats = catsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-          
-          await setDoc(doc(db, 'settings', 'catalog'), {
-            apps: allApps,
-            categories: allCats,
-            updatedAt: serverTimestamp()
-          });
-
-          await updateDoc(doc(db, 'settings', 'global'), {
-            catalogVersion: increment(1),
-            lastCatalogUpdate: Date.now()
-          });
+          await rebuildAndSyncCatalog();
         } catch (err) {
           console.warn('Catalog sync failed:', err);
         }
-
-        cacheService.clearAll();
       } catch (error) {
         console.error("Error deleting category:", error);
       }
@@ -127,7 +96,11 @@ export default function AdminCategories() {
         defaultPCAppsDescription: descPC,
         defaultBundlesDescription: descBundles,
       });
-      cacheService.clearAll();
+      try {
+        await rebuildAndSyncCatalog();
+      } catch (err) {
+        console.warn('Catalog sync failed:', err);
+      }
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 4000);
     } catch (err) {

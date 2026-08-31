@@ -15,7 +15,7 @@ import {
   AlertCircle, Sparkles, RefreshCw, X, Eye, EyeOff
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { cacheService } from '../../lib/cacheService';
+import { rebuildAndSyncCatalog } from '../../lib/catalogSync';
 
 interface SavedAppRecord {
   savedDocId: string;
@@ -151,28 +151,13 @@ export default function AdminSavedApps() {
         await deleteDoc(doc(db, 'saved_apps', savedDocId));
       } catch {}
 
-      // Sync catalog snapshot for fast user cache
+      // Sync unified snapshot for 33k users
       try {
-        const appsSnap = await getDocs(collection(db, 'apps'));
-        const catsSnap = await getDocs(collection(db, 'categories'));
-        const allApps = appsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        const allCats = catsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        
-        await setDoc(doc(db, 'settings', 'catalog'), {
-          apps: allApps,
-          categories: allCats,
-          updatedAt: serverTimestamp()
-        });
-
-        await updateDoc(doc(db, 'settings', 'global'), {
-          catalogVersion: increment(1),
-          lastCatalogUpdate: Date.now()
-        });
+        await rebuildAndSyncCatalog();
       } catch (err) {
         console.warn('Catalog sync failed:', err);
       }
 
-      cacheService.clearAll();
       setDeleteConfirm(null);
     } catch (error) {
       console.error("Permanent delete error:", error);
@@ -193,18 +178,8 @@ export default function AdminSavedApps() {
 
       // Update catalog snapshot
       try {
-        const appsSnap = await getDocs(collection(db, 'apps'));
-        const catsSnap = await getDocs(collection(db, 'categories'));
-        await setDoc(doc(db, 'settings', 'catalog'), {
-          apps: appsSnap.docs.map(d => ({ id: d.id, ...d.data() })),
-          categories: catsSnap.docs.map(d => ({ id: d.id, ...d.data() })),
-          updatedAt: serverTimestamp()
-        });
-        await updateDoc(doc(db, 'settings', 'global'), {
-          catalogVersion: increment(1)
-        });
+        await rebuildAndSyncCatalog();
       } catch {}
-      cacheService.clearAll();
     } catch (error) {
       console.error("Status toggle error:", error);
     }

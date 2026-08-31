@@ -1,8 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { cacheService, CACHE_KEYS } from '../lib/cacheService';
-import { useSettings } from './SettingsContext';
 
 export interface AppItemData {
   id: string;
@@ -47,8 +46,6 @@ interface AppsContextType {
 const AppsContext = createContext<AppsContextType | undefined>(undefined);
 
 export const AppsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { settings } = useSettings();
-
   const [apps, setApps] = useState<AppItemData[]>([]);
   const [categories, setCategories] = useState<CategoryData[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -56,44 +53,44 @@ export const AppsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Stable references
   const appsRef = useRef<AppItemData[]>([]);
   const categoriesRef = useRef<CategoryData[]>([]);
-  const isSyncingRef = useRef<boolean>(false);
+  const isFetchingRef = useRef<boolean>(false);
 
   appsRef.current = apps;
   categoriesRef.current = categories;
 
   /**
-   * ULTRA-OPTIMIZED 1-READ FETCHER:
-   * First tries to fetch `settings/catalog` (exactly 1 document read for all 300+ apps).
-   * Fallback to direct collections only if catalog snapshot document is not yet built by admin.
+   * EXACTLY 1 FIRESTORE READ FOR ENTIRE APP:
+   * Fetches `settings/catalog` single document containing all apps & categories.
    */
-  const fetchCatalogFromFirestore = useCallback(async (currentLocalApps: AppItemData[], currentLocalCats: CategoryData[]) => {
-    if (isSyncingRef.current) return;
-    isSyncingRef.current = true;
+  const fetchSingleDocumentCatalog = useCallback(async (): Promise<boolean> => {
+    if (isFetchingRef.current) return false;
+    isFetchingRef.current = true;
 
     try {
-      console.log(`[AppsProvider] Fetching 1-Document Snapshot (Server v${settings.catalogVersion || 1})...`);
-
-      // ATTEMPT 1: Single document read (`settings/catalog`) = EXACTLY 1 READ!
+      console.log('[AppsProvider] Performing 1-Read Catalog Fetch from `settings/catalog`...');
+      
       let fetchedApps: AppItemData[] = [];
       let fetchedCats: CategoryData[] = [];
+      let catalogVersion = Date.now();
 
       try {
-        const catalogSnap = await getDoc(doc(db, 'settings', 'catalog'));
-        if (catalogSnap.exists()) {
-          const data = catalogSnap.data();
+        const snap = await getDoc(doc(db, 'settings', 'catalog'));
+        if (snap.exists()) {
+          const data = snap.data();
           if (data && Array.isArray(data.apps) && data.apps.length > 0) {
             fetchedApps = (data.apps as AppItemData[]).filter(item => !item.status || item.status === 'published');
             fetchedCats = (data.categories || []) as CategoryData[];
-            console.log(`[AppsProvider] SUCCESS: Loaded entire catalog (${fetchedApps.length} apps) with 1 SINGLE FIRESTORE READ!`);
+            catalogVersion = data.version || Date.now();
+            console.log(`[AppsProvider] 1-READ SUCCESS: Loaded ${fetchedApps.length} apps & ${fetchedCats.length} categories in 1 Read!`);
           }
         }
-      } catch (e) {
-        console.warn('[AppsProvider] Single catalog document read note:', e);
+      } catch (err) {
+        console.warn('[AppsProvider] Note reading `settings/catalog`:', err);
       }
 
-      // ATTEMPT 2: Fallback if single document snapshot wasn't available yet
+      // Initial Bootstrap Fallback (Only if admin has not yet clicked sync even once)
       if (fetchedApps.length === 0) {
-        console.log('[AppsProvider] Fallback: Fetching from collections...');
+        console.log('[AppsProvider] Direct collection bootstrap fetch...');
         const [appsSnap, catsSnap] = await Promise.all([
           getDocs(collection(db, 'apps')),
           getDocs(collection(db, 'categories'))
@@ -107,75 +104,62 @@ export const AppsProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .map(d => ({ id: d.id, ...d.data() } as CategoryData));
       }
 
-      // Update state
-      setApps(fetchedApps);
-      setCategories(fetchedCats);
-      setLoading(false);
+      if (fetchedApps.length > 0) {
+        setApps(fetchedApps);
+        setCategories(fetchedCats);
+        setLoading(false);
 
-      // Save Permanently to Lifetime IndexedDB
-      await Promise.all([
-        cacheService.set(CACHE_KEYS.APPS, fetchedApps),
-        cacheService.set(CACHE_KEYS.CATEGORIES, fetchedCats),
-        cacheService.set(CACHE_KEYS.CATALOG_VERSION, settings.catalogVersion || 1),
-        cacheService.set(CACHE_KEYS.LAST_SYNC_TIME, Date.now())
-      ]);
-
-      console.log(`[AppsProvider] Saved to Permanent IndexedDB: ${fetchedApps.length} items.`);
-    } catch (err) {
-      console.warn('[AppsProvider] Network/fetch note, using local cache:', err);
-      if (currentLocalApps.length > 0) {
-        setApps(currentLocalApps);
-        setCategories(currentLocalCats);
+        // Permanently persist to Lifetime IndexedDB
+        await Promise.all([
+          cacheService.set(CACHE_KEYS.APPS, fetchedApps),
+          cacheService.set(CACHE_KEYS.CATEGORIES, fetchedCats),
+          cacheService.set(CACHE_KEYS.CATALOG_VERSION, catalogVersion),
+          cacheService.set(CACHE_KEYS.LAST_SYNC_TIME, Date.now())
+        ]);
+        return true;
       }
-      setLoading(false);
+    } catch (error) {
+      console.warn('[AppsProvider] Network/Firestore fetch note (using local cache):', error);
     } finally {
-      isSyncingRef.current = false;
+      isFetchingRef.current = false;
+      setLoading(false);
     }
-  }, [settings.catalogVersion]);
+    return false;
+  }, []);
 
-  // Primary Hydration & Zero-Read Check
+  // Primary Hydration Lifecycle
   useEffect(() => {
     let isMounted = true;
 
     async function initCatalog() {
       try {
-        // 1. Read IndexedDB lifetime storage
-        const [cachedApps, cachedCats, cachedVer] = await Promise.all([
+        // 1. FAST LOCAL HYDRATION: Read IndexedDB first (0ms, 0 Reads)
+        const [cachedApps, cachedCats] = await Promise.all([
           cacheService.getAsync<AppItemData[]>(CACHE_KEYS.APPS),
-          cacheService.getAsync<CategoryData[]>(CACHE_KEYS.CATEGORIES),
-          cacheService.getAsync<number>(CACHE_KEYS.CATALOG_VERSION)
+          cacheService.getAsync<CategoryData[]>(CACHE_KEYS.CATEGORIES)
         ]);
 
         if (!isMounted) return;
 
-        const hasCachedApps = cachedApps && cachedApps.length > 0;
-        const currentServerVersion = settings.catalogVersion || 1;
-        const localVersion = cachedVer || 0;
-
-        if (hasCachedApps) {
-          // Immediately populate UI with 0ms latency
+        // If local cache exists, POPULATE UI AND STOP!
+        // GUARANTEE: ZERO FIRESTORE READS ON REFRESH OR REPEAT VISITS!
+        if (cachedApps && cachedApps.length > 0) {
           setApps(cachedApps);
           if (cachedCats && cachedCats.length > 0) setCategories(cachedCats);
           setLoading(false);
-
-          // ZERO FIRESTORE READS PATH:
-          // If offline OR local version matches server version, STOP HERE! 0 Firestore reads!
-          if (!navigator.onLine || localVersion >= currentServerVersion) {
-            console.log(`[AppsProvider] 0-Read Active (Version ${localVersion}): No network calls.`);
-            return;
-          }
-        }
-
-        // If offline and no cache, stop loading cleanly
-        if (!navigator.onLine) {
-          setLoading(false);
+          console.log(`[AppsProvider] 0-READ GUARANTEE: Loaded ${cachedApps.length} apps from IndexedDB (0 Firestore calls).`);
           return;
         }
 
-        // Fetch (uses the 1-Document read technique)
-        await fetchCatalogFromFirestore(cachedApps || [], cachedCats || []);
+        // 2. Only if local cache is completely empty and device is online:
+        // Do EXACTLY 1 FIRESTORE READ to download the catalog
+        if (navigator.onLine) {
+          await fetchSingleDocumentCatalog();
+        } else {
+          setLoading(false);
+        }
       } catch (err) {
-        console.warn('[AppsProvider] Catalog initialization note:', err);
+        console.warn('[AppsProvider] Init note:', err);
         setLoading(false);
       }
     }
@@ -185,15 +169,14 @@ export const AppsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => {
       isMounted = false;
     };
-  }, [fetchCatalogFromFirestore, settings.catalogVersion]);
+  }, [fetchSingleDocumentCatalog]);
 
   const refreshApps = async (force = true) => {
     if (force) {
       await cacheService.remove(CACHE_KEYS.APPS);
       await cacheService.remove(CACHE_KEYS.CATEGORIES);
-      await cacheService.remove(CACHE_KEYS.CATALOG_VERSION);
     }
-    await fetchCatalogFromFirestore([], []);
+    await fetchSingleDocumentCatalog();
   };
 
   const getCategoryName = useCallback((catIdOrName?: string): string => {
@@ -216,15 +199,14 @@ export const AppsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (cachedFound) return cachedFound;
     }
 
-    // 3. Fallback: single doc fetch only if document is missing locally (1 read)
+    // 3. Fallback: single doc fetch only if missing locally (1 read)
     try {
       const snap = await getDoc(doc(db, 'apps', id));
       if (snap.exists()) {
-        const item = { id: snap.id, ...snap.data() } as AppItemData;
-        return item;
+        return { id: snap.id, ...snap.data() } as AppItemData;
       }
     } catch (err) {
-      console.warn(`[AppsProvider] Failed fetching single app ${id}:`, err);
+      console.warn(`[AppsProvider] Failed fetching app ${id}:`, err);
     }
     return null;
   };

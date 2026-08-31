@@ -10,7 +10,7 @@ import {
   Eye, Smartphone, Film, Layers, Monitor
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { cacheService } from '../../lib/cacheService';
+import { rebuildAndSyncCatalog } from '../../lib/catalogSync';
 
 export default function AdminApps() {
   const [items, setItems] = useState<any[]>([]);
@@ -50,28 +50,12 @@ export default function AdminApps() {
       try {
         await deleteDoc(doc(db, 'apps', itemId));
         
-        // Rebuild the catalog snapshot for 33k user optimization
+        // Rebuild the unified snapshot
         try {
-          const appsSnap = await getDocs(collection(db, 'apps'));
-          const catsSnap = await getDocs(collection(db, 'categories'));
-          const allApps = appsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-          const allCats = catsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-          
-          await setDoc(doc(db, 'settings', 'catalog'), {
-            apps: allApps,
-            categories: allCats,
-            updatedAt: serverTimestamp()
-          });
-
-          await updateDoc(doc(db, 'settings', 'global'), {
-            catalogVersion: increment(1),
-            lastCatalogUpdate: Date.now()
-          });
+          await rebuildAndSyncCatalog();
         } catch (err) {
           console.warn('Catalog sync failed:', err);
         }
-
-        cacheService.clearAll();
       } catch (error) {
         console.error("Delete error:", error);
       }

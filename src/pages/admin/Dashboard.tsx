@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { GlassCard } from '../../components/ui/GlassCard';
@@ -9,17 +9,14 @@ import {
   Layers, 
   Users, 
   Download, 
-  Eye, 
   TrendingUp, 
   Clock, 
-  ShieldCheck, 
   Sparkles,
   ArrowUpRight,
-  RefreshCw,
-  Server
+  RefreshCw
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { syncCatalogSnapshot } from '../../lib/catalogSync';
+import { rebuildAndSyncCatalog } from '../../lib/catalogSync';
 import { useApps } from '../../context/AppsContext';
 
 interface RecentDownload {
@@ -52,9 +49,9 @@ export default function AdminDashboard() {
     setSyncing(true);
     try {
       console.log('Building 1-Read Catalog Snapshot...');
-      const res = await syncCatalogSnapshot();
+      const res = await rebuildAndSyncCatalog();
       await refreshApps(false);
-      alert(`Catalog snapshot built successfully! ${res.count} apps bundled into 1 single document. All users will now load with 1 read!`);
+      alert(`1-Read Snapshot Built & Broadcasted! ${res.count} apps bundled into a single document. All 33k+ users will now load with 1 read!`);
     } catch (err) {
       console.error('Manual catalog sync failed:', err);
       alert('Sync failed. Check console for details.');
@@ -63,78 +60,53 @@ export default function AdminDashboard() {
     }
   };
 
-  useEffect(() => {
-    // Real-time listener for Apps stats
-    const unsubApps = onSnapshot(collection(db, 'apps'), (snap) => {
-      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const published = docs.filter((d: any) => !d.status || d.status === 'published').length;
-      const banners = docs.filter((d: any) => d.isBanner === true).length;
-      
-      // Calculate top items
-      const sorted = [...docs].sort((a: any, b: any) => (b.downloads || 0) - (a.downloads || 0)).slice(0, 5);
+  const loadDashboardData = async () => {
+    setLoading(true);
+    try {
+      // 1. Fetch apps & cats in parallel
+      const [appsSnap, catsSnap, usersSnap, dlSnap] = await Promise.all([
+        getDocs(collection(db, 'apps')),
+        getDocs(collection(db, 'categories')),
+        getDocs(collection(db, 'users')),
+        getDocs(query(collection(db, 'downloads'), orderBy('downloadedAt', 'desc'), limit(15)))
+      ]);
+
+      const appDocs = appsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const published = appDocs.filter((d: any) => !d.status || d.status === 'published').length;
+      const banners = appDocs.filter((d: any) => d.isBanner === true).length;
+      const sorted = [...appDocs].sort((a: any, b: any) => (b.downloads || 0) - (a.downloads || 0)).slice(0, 5);
       setTopItems(sorted);
 
-      setStats(prev => ({
-        ...prev,
-        totalApps: snap.size,
-        publishedItems: published,
-        bannerItems: banners
-      }));
-    });
-
-    // Real-time listener for Categories
-    const unsubCats = onSnapshot(collection(db, 'categories'), (snap) => {
-      setStats(prev => ({
-        ...prev,
-        totalCategories: snap.size
-      }));
-    });
-
-    // Real-time listener for Users
-    const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
-      setStats(prev => ({
-        ...prev,
-        totalUsers: snap.size
-      }));
-    });
-
-    // Real-time listener for Downloads
-    const unsubDownloads = onSnapshot(collection(db, 'downloads'), (snap) => {
-      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() } as RecentDownload));
-      
-      // Calculate today's downloads
+      const dlDocs = dlSnap.docs.map(d => ({ id: d.id, ...d.data() } as RecentDownload));
       const startOfToday = new Date();
       startOfToday.setHours(0, 0, 0, 0);
-      
-      const todayCount = docs.filter(d => {
+
+      const todayCount = dlDocs.filter(d => {
         if (!d.downloadedAt) return false;
         const date = d.downloadedAt.toDate ? d.downloadedAt.toDate() : new Date(d.downloadedAt);
         return date >= startOfToday;
       }).length;
 
-      setStats(prev => ({
-        ...prev,
-        totalDownloads: snap.size,
-        todayDownloads: todayCount
-      }));
+      setRecentDownloads(dlDocs.slice(0, 6));
 
-      // Sort recent 5
-      const sorted = [...docs].sort((a: any, b: any) => {
-        const dateA = a.downloadedAt?.toDate ? a.downloadedAt.toDate().getTime() : (a.downloadedAt ? new Date(a.downloadedAt).getTime() : 0);
-        const dateB = b.downloadedAt?.toDate ? b.downloadedAt.toDate().getTime() : (b.downloadedAt ? new Date(b.downloadedAt).getTime() : 0);
-        return dateB - dateA;
-      }).slice(0, 6);
-
-      setRecentDownloads(sorted);
+      setStats({
+        totalApps: appsSnap.size,
+        totalCategories: catsSnap.size,
+        totalUsers: usersSnap.size,
+        totalDownloads: dlDocs.length,
+        todayDownloads: todayCount,
+        publishedItems: published,
+        bannerItems: banners
+      });
+    } catch (err) {
+      console.warn('Dashboard data fetch note:', err);
+    } finally {
       setLoading(false);
-    });
+    }
+  };
 
-    return () => {
-      unsubApps();
-      unsubCats();
-      unsubUsers();
-      unsubDownloads();
-    };
+  useEffect(() => {
+    loadDashboardData();
   }, []);
 
   return (
@@ -149,15 +121,15 @@ export default function AdminDashboard() {
                 Admin Control Room
               </span>
               <span className="flex items-center gap-1 text-emerald-400 text-xs font-bold bg-emerald-500/10 px-2 py-1 rounded-lg border border-emerald-500/20">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Live Cloud Sync
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                1-Read Engine Active
               </span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
               Welcome back, {user?.displayName || 'Administrator'}
             </h1>
             <p className="text-blue-100 text-xs sm:text-sm font-medium max-w-xl">
-              Monitor real-time downloads, catalog health, user activities, and broadcast 1-read snapshots to 33,000+ app users.
+              Monitor catalog stats, user activity, and broadcast 1-read snapshots to 33,000+ app users.
             </p>
           </div>
 
@@ -168,7 +140,7 @@ export default function AdminDashboard() {
               className="bg-white hover:bg-blue-50 text-blue-900 font-black text-xs px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-2"
             >
               <RefreshCw size={15} className={syncing ? 'animate-spin' : ''} />
-              <span>{syncing ? 'Building 1-Read Snapshot...' : 'Rebuild 1-Read Snapshot'}</span>
+              <span>{syncing ? 'Building Snapshot...' : 'Rebuild 1-Read Snapshot'}</span>
             </Button>
             <Link to="/admin/apps/new">
               <Button className="bg-blue-500 hover:bg-blue-400 text-white font-black text-xs px-4 py-2.5 rounded-xl shadow-lg">
@@ -270,7 +242,7 @@ export default function AdminDashboard() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Clock size={18} className="text-blue-600" />
-              <h2 className="text-base font-black text-slate-900">Live Download Feed</h2>
+              <h2 className="text-base font-black text-slate-900">Recent Download Feed</h2>
             </div>
             <Link to="/admin/downloads" className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-0.5">
               View All Logs <ArrowUpRight size={14} />

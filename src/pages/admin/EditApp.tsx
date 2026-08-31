@@ -10,7 +10,7 @@ import {
   Save, ArrowLeft, Smartphone, Star, Film, Layers, Monitor
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { cacheService } from '../../lib/cacheService';
+import { rebuildAndSyncCatalog } from '../../lib/catalogSync';
 
 export default function AdminEditApp() {
   const { appId } = useParams<{ appId: string }>();
@@ -135,14 +135,11 @@ export default function AdminEditApp() {
 
       await updateDoc(doc(db, 'apps', appId), updateData);
       
-      // Update catalog version to trigger Delta Sync for all users
+      // Auto-rebuild the 1-read snapshot immediately
       try {
-        await updateDoc(doc(db, 'settings', 'global'), {
-          catalogVersion: increment(1),
-          lastCatalogUpdate: Date.now()
-        });
+        await rebuildAndSyncCatalog();
       } catch (err) {
-        console.warn('Version update failed:', err);
+        console.warn('Snapshot rebuild note:', err);
       }
 
       navigate('/admin/apps');

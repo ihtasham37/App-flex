@@ -6,7 +6,7 @@ import { Button } from '../ui/Button';
 import { AppLogo } from '../ui/AppLogo';
 import { SearchModal } from '../SearchModal';
 import { Bookmark, Search, MessageCircle } from 'lucide-react';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 
 export const Header = () => {
@@ -37,18 +37,25 @@ export const Header = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isSearchOpen]);
 
-  // Fetch saved count for user real-time
+  // Fetch saved count for user (one-time on login, no continuous listeners)
   useEffect(() => {
     if (!user) {
       setSavedCount(0);
       return;
     }
-    const q = query(collection(db, 'saved_apps'), where('userId', '==', user.uid));
-    const unsub = onSnapshot(q, (snap) => {
-      setSavedCount(snap.size);
-    });
-    return () => unsub();
-  }, [user]);
+    let isMounted = true;
+    const fetchSaved = async () => {
+      try {
+        const q = query(collection(db, 'saved_apps'), where('userId', '==', user.uid));
+        const snap = await getDocs(q);
+        if (isMounted) setSavedCount(snap.size);
+      } catch (err) {
+        console.warn('Saved count note:', err);
+      }
+    };
+    fetchSaved();
+    return () => { isMounted = false; };
+  }, [user?.uid]);
 
   const isHome = location.pathname === '/';
   const isApps = location.pathname === '/explore';

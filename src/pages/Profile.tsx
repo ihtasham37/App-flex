@@ -9,7 +9,7 @@ import {
   MessageCircle, MessageSquare, Send
 } from 'lucide-react';
 import { auth, db } from '../lib/firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSettings } from '../context/SettingsContext';
@@ -25,23 +25,21 @@ export default function Profile() {
 
   useEffect(() => {
     if (!user) return;
-
-    // Real-time saved apps count for current user
-    const unsubSaved = onSnapshot(
-      query(collection(db, 'saved_apps'), where('userId', '==', user.uid)),
-      (snap) => {
-        setSavedCount(snap.size);
-        setLoadingStats(false);
-      },
-      (err) => {
+    let isMounted = true;
+    const fetchSaved = async () => {
+      try {
+        const snap = await getDocs(query(collection(db, 'saved_apps'), where('userId', '==', user.uid)));
+        if (isMounted) {
+          setSavedCount(snap.size);
+          setLoadingStats(false);
+        }
+      } catch (err) {
         console.warn('Could not fetch user saved count:', err);
-        setLoadingStats(false);
+        if (isMounted) setLoadingStats(false);
       }
-    );
-
-    return () => {
-      unsubSaved();
     };
+    fetchSaved();
+    return () => { isMounted = false; };
   }, [user]);
 
   const handleLogout = async () => {
