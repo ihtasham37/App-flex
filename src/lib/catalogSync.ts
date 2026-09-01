@@ -55,14 +55,11 @@ export async function rebuildAndSyncCatalog() {
     // 1. Write the unified snapshot document
     await setDoc(doc(db, 'settings', 'catalog'), snapshotData);
 
-    // 2. Update global settings with the new catalogVersion and codeReleaseVersion together
-    const nextCodeVersion = (globalSettings.codeReleaseVersion || 1) + 1;
+    // 2. Update global settings with the new catalogVersion
     await setDoc(doc(db, 'settings', 'global'), {
       ...globalSettings,
       catalogVersion: newVersion,
-      lastCatalogUpdate: newVersion,
-      codeReleaseVersion: nextCodeVersion,
-      codeReleaseNote: globalSettings.codeReleaseNote || 'Complete 1-Click System Sync Updated.'
+      lastCatalogUpdate: newVersion
     }, { merge: true });
 
     // 3. Update local cache
@@ -72,18 +69,12 @@ export async function rebuildAndSyncCatalog() {
       cacheService.set(CACHE_KEYS.SETTINGS, {
         ...globalSettings,
         catalogVersion: newVersion,
-        lastCatalogUpdate: newVersion,
-        codeReleaseVersion: nextCodeVersion
+        lastCatalogUpdate: newVersion
       }),
       cacheService.set(CACHE_KEYS.ADS, adsSettings),
       cacheService.set(CACHE_KEYS.CATALOG_VERSION, newVersion),
-      cacheService.set(CACHE_KEYS.CLIENT_CODE_VERSION, nextCodeVersion),
       cacheService.set(CACHE_KEYS.LAST_SYNC_TIME, Date.now())
     ]);
-
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('appflex_client_code_version', nextCodeVersion.toString());
-    }
 
     // 4. Dispatch custom events for in-memory contexts
     if (typeof window !== 'undefined') {

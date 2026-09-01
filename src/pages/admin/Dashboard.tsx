@@ -16,7 +16,6 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { rebuildAndSyncCatalog } from '../../lib/catalogSync';
 import { useApps } from '../../context/AppsContext';
 
 interface RecentDownload {
@@ -42,25 +41,8 @@ export default function AdminDashboard() {
   const [recentDownloads, setRecentDownloads] = useState<RecentDownload[]>([]);
   const [topItems, setTopItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
 
-  const handleSyncCatalog = async () => {
-    if (syncing) return;
-    setSyncing(true);
-    try {
-      console.log('Building 1-Read Catalog Snapshot...');
-      const res = await rebuildAndSyncCatalog();
-      await refreshApps(false);
-      alert(`1-Read Snapshot Built & Broadcasted! ${res.count} apps bundled into a single document. All 33k+ users will now load with 1 read!`);
-    } catch (err) {
-      console.error('Manual catalog sync failed:', err);
-      alert('Sync failed. Check console for details.');
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-    const loadDashboardData = async () => {
+  const loadDashboardData = async () => {
     setLoading(true);
     try {
       // 0 READS from Firestore for Apps and Categories! (Uses context/memory)
@@ -93,7 +75,6 @@ export default function AdminDashboard() {
       });
 
       // Background auto-sync 1-read snapshot for all 33k+ users
-      rebuildAndSyncCatalog().catch(e => console.warn('Background auto-sync note:', e));
     } catch (err) {
       console.warn('Dashboard data fetch note:', err);
     } finally {
@@ -130,16 +111,8 @@ export default function AdminDashboard() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button 
-              onClick={handleSyncCatalog}
-              disabled={syncing}
-              className="bg-white hover:bg-blue-50 text-blue-900 font-black text-xs px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-2"
-            >
-              <RefreshCw size={15} className={syncing ? 'animate-spin' : ''} />
-              <span>{syncing ? 'Building Snapshot...' : 'Rebuild 1-Read Snapshot'}</span>
-            </Button>
             <Link to="/admin/apps/new">
-              <Button className="bg-blue-500 hover:bg-blue-400 text-white font-black text-xs px-4 py-2.5 rounded-xl shadow-lg">
+              <Button className="bg-white hover:bg-blue-50 text-blue-900 font-black text-xs px-4 py-2.5 rounded-xl shadow-lg">
                 + Add Item
               </Button>
             </Link>

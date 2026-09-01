@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { 
-  collection, query, where, onSnapshot, deleteDoc, doc, 
+  collection, query, where, deleteDoc, doc, 
   getDocs, setDoc, updateDoc, increment, serverTimestamp 
 } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
@@ -15,7 +15,6 @@ import {
   AlertCircle, Sparkles, RefreshCw, X, Eye, EyeOff
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { rebuildAndSyncCatalog } from '../../lib/catalogSync';
 import { useApps } from '../../context/AppsContext';
 
 interface SavedAppRecord {
@@ -125,7 +124,6 @@ export default function AdminSavedApps() {
 
       // Sync unified snapshot for 33k users
       try {
-        await rebuildAndSyncCatalog();
       } catch (err) {
         console.warn('Catalog sync failed:', err);
       }
@@ -150,7 +148,6 @@ export default function AdminSavedApps() {
 
       // Update catalog snapshot
       try {
-        await rebuildAndSyncCatalog();
       } catch {}
     } catch (error) {
       console.error("Status toggle error:", error);

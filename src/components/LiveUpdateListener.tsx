@@ -7,10 +7,10 @@ import { Button } from './ui/Button';
 export function LiveUpdateListener() {
   const { settings } = useSettings();
   const [showUpdateModal, setShowUpdateModal] = useState(false);
-  const [countdown, setCountdown] = useState(3);
+  const [countdown, setCountdown] = useState(5);
   const [isUpdating, setIsUpdating] = useState(false);
-  const autoReloadTimer = useRef<any>(null);
   const countdownInterval = useRef<any>(null);
+  const initialVersionRef = useRef<number | null>(null);
 
   const getStoredVersion = (): number => {
     if (typeof window === 'undefined') return 0;
@@ -22,11 +22,8 @@ export function LiveUpdateListener() {
     setIsUpdating(true);
     try {
       const serverVersion = settings.codeReleaseVersion || 1;
-      
-      // Save version FIRST to prevent repeat prompts
       localStorage.setItem('appflex_client_code_version', serverVersion.toString());
 
-      // Update Service Worker if available
       if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
         try {
           const registrations = await navigator.serviceWorker.getRegistrations();
@@ -38,7 +35,6 @@ export function LiveUpdateListener() {
         }
       }
 
-      // Reload page smoothly
       setTimeout(() => {
         window.location.reload();
       }, 300);
@@ -52,55 +48,37 @@ export function LiveUpdateListener() {
     const serverVersion = settings.codeReleaseVersion;
     if (!serverVersion || serverVersion <= 0) return;
 
-    const localVersion = getStoredVersion();
-
-    // If first launch on this browser/session, record current version silently
-    if (localVersion === 0) {
-      localStorage.setItem('appflex_client_code_version', serverVersion.toString());
+    // Set baseline initial version on first mount
+    if (initialVersionRef.current === null) {
+      initialVersionRef.current = serverVersion;
+      const stored = getStoredVersion();
+      if (stored === 0 || stored < serverVersion) {
+        localStorage.setItem('appflex_client_code_version', serverVersion.toString());
+      }
       return;
     }
 
-    // If server version is strictly newer than local version, notify
-    if (serverVersion > localVersion) {
-      console.log(`[LiveUpdateListener] New Code Release: Server v${serverVersion} > Local v${localVersion}`);
-      setShowUpdateModal(true);
-
-      // Start countdown
-      setCountdown(3);
-      if (countdownInterval.current) clearInterval(countdownInterval.current);
-      countdownInterval.current = setInterval(() => {
-        setCountdown((prev) => {
-          if (prev <= 1) {
-            if (countdownInterval.current) clearInterval(countdownInterval.current);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-
-      // Automatic reload if enabled
-      if (settings.autoReloadClients !== false) {
-        if (autoReloadTimer.current) clearTimeout(autoReloadTimer.current);
-        autoReloadTimer.current = setTimeout(() => {
-          performUpdateAndReload();
-        }, 3500);
+    // Only prompt if a new version is broadcast live while user is active
+    if (serverVersion > initialVersionRef.current) {
+      const localVersion = getStoredVersion();
+      if (serverVersion > localVersion) {
+        console.log(`[LiveUpdateListener] New Code Release broadcasted: v${serverVersion}`);
+        setShowUpdateModal(true);
       }
     } else {
       setShowUpdateModal(false);
     }
 
     return () => {
-      if (autoReloadTimer.current) clearTimeout(autoReloadTimer.current);
       if (countdownInterval.current) clearInterval(countdownInterval.current);
     };
-  }, [settings.codeReleaseVersion, settings.autoReloadClients]);
+  }, [settings.codeReleaseVersion]);
 
   const handleDismiss = () => {
     if (settings.codeReleaseVersion) {
       localStorage.setItem('appflex_client_code_version', settings.codeReleaseVersion.toString());
     }
     setShowUpdateModal(false);
-    if (autoReloadTimer.current) clearTimeout(autoReloadTimer.current);
     if (countdownInterval.current) clearInterval(countdownInterval.current);
   };
 

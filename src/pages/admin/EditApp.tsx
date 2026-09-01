@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { doc, getDoc, updateDoc, serverTimestamp, onSnapshot, collection, increment, getDocs, setDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, serverTimestamp, collection, increment, getDocs, setDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Input } from '../../components/ui/Input';
@@ -11,7 +11,6 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useApps } from '../../context/AppsContext';
-import { rebuildAndSyncCatalog } from '../../lib/catalogSync';
 
 export default function AdminEditApp() {
   const { apps: ctxApps, categories: ctxCategories } = useApps();
@@ -138,7 +137,6 @@ export default function AdminEditApp() {
       
       // Auto-rebuild the 1-read snapshot immediately
       try {
-        await rebuildAndSyncCatalog();
       } catch (err) {
         console.warn('Snapshot rebuild note:', err);
       }

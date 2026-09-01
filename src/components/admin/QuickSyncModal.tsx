@@ -46,35 +46,6 @@ export function QuickSyncModal({ isOpen, onClose }: QuickSyncModalProps) {
     }
   };
 
-  const handleSyncCodeOnly = async () => {
-    setIsSyncing(true);
-    setSuccessResult(null);
-    try {
-      const res = await broadcastCodeUpdate(note.trim() || 'Code & feature update released.');
-      setSuccessResult({ codeVersion: res.codeVersion, type: 'code' });
-    } catch (err) {
-      console.error('Failed to broadcast code update:', err);
-      alert('Failed to broadcast code update.');
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  const handleSyncCatalogOnly = async () => {
-    setIsSyncing(true);
-    setSuccessResult(null);
-    try {
-      await syncCatalogSnapshot();
-      await refreshApps(false);
-      setSuccessResult({ catalogVersion: (settings.catalogVersion || 1) + 1, type: 'catalog' });
-    } catch (err) {
-      console.error('Failed to sync catalog:', err);
-      alert('Failed to sync catalog.');
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
       <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-100 relative overflow-hidden">
@@ -157,30 +128,10 @@ export function QuickSyncModal({ isOpen, onClose }: QuickSyncModalProps) {
             className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-xs py-3.5 rounded-xl shadow-lg shadow-blue-500/25 flex items-center justify-center gap-2"
           >
             <Sparkles size={16} className={isSyncing ? 'animate-spin' : ''} />
-            <span>{isSyncing ? 'Broadcasting & Building Snapshot...' : '1-Click Full System Broadcast (Catalog + Code)'}</span>
+            <span>{isSyncing ? 'Updating App...' : 'Publish & Update App Now (1-Click)'}</span>
           </Button>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Button
-              onClick={handleSyncCatalogOnly}
-              disabled={isSyncing}
-              variant="outline"
-              className="text-xs font-bold py-2.5 rounded-xl border-slate-200 hover:bg-slate-50 flex items-center justify-center gap-1.5"
-            >
-              <Layers size={14} />
-              <span>Catalog Only (1-Read)</span>
-            </Button>
-
-            <Button
-              onClick={handleSyncCodeOnly}
-              disabled={isSyncing}
-              variant="outline"
-              className="text-xs font-bold py-2.5 rounded-xl border-slate-200 hover:bg-slate-50 flex items-center justify-center gap-1.5"
-            >
-              <RefreshCw size={14} />
-              <span>Code Only</span>
-            </Button>
-          </div>
+          
         </div>
       </div>
     </div>

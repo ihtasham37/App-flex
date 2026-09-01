@@ -1,12 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { collection, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp, updateDoc, increment, getDocs, setDoc } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, serverTimestamp, updateDoc, increment, getDocs, setDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Tag, Plus, Trash2, Smartphone, Film, Layers, Monitor, FileText, Save, CheckCircle2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { rebuildAndSyncCatalog } from '../../lib/catalogSync';
 import { useApps } from '../../context/AppsContext';
 import { useSettings } from '../../context/SettingsContext';
 
@@ -47,7 +46,6 @@ export default function AdminCategories() {
 
       // Rebuild the unified snapshot
       try {
-        await rebuildAndSyncCatalog();
       } catch (err) {
         console.warn('Catalog sync failed:', err);
       }
@@ -67,7 +65,6 @@ export default function AdminCategories() {
         
         // Rebuild the unified snapshot
         try {
-          await rebuildAndSyncCatalog();
         } catch (err) {
           console.warn('Catalog sync failed:', err);
         }
@@ -88,7 +85,6 @@ export default function AdminCategories() {
         defaultBundlesDescription: descBundles,
       });
       try {
-        await rebuildAndSyncCatalog();
       } catch (err) {
         console.warn('Catalog sync failed:', err);
       }
