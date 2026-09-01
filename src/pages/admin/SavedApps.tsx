@@ -1,8 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { 
-  collection, query, where, deleteDoc, doc, 
-  getDocs, setDoc, updateDoc, increment, serverTimestamp 
-} from 'firebase/firestore';
+import { deleteDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { Link } from 'react-router-dom';
@@ -45,73 +42,29 @@ export default function AdminSavedApps() {
     }
 
     const localSavedIds = getLocalSavedAppIds(user.uid);
+    const appsMap = new Map();
+    ctxApps.forEach(d => appsMap.set(d.id, d));
 
-    import('firebase/firestore').then(({ getDocs, query, where, collection }) => {
-      const q = query(collection(db, 'saved_apps'), where('userId', '==', user.uid));
-      getDocs(q).then((savedSnap) => {
-        const firestoreDocs = savedSnap.docs.map(d => ({
-          savedDocId: d.id,
-          appId: d.data().appId,
-          savedAt: d.data().savedAt,
-          fallbackData: d.data()
-        }));
-
-        const appsMap = new Map();
-        ctxApps.forEach(d => appsMap.set(d.id, d));
-
-        const allAppIds = new Set<string>();
-        localSavedIds.forEach(id => allAppIds.add(id));
-        firestoreDocs.forEach(d => allAppIds.add(d.appId));
-
-        const combined: SavedAppRecord[] = Array.from(allAppIds).map(appId => {
-          const fsDoc = firestoreDocs.find(d => d.appId === appId);
-          const liveApp = appsMap.get(appId);
-          return {
-            savedDocId: fsDoc?.savedDocId || `${user.uid}_${appId}`,
-            appId: appId,
-            savedAt: fsDoc?.savedAt || new Date(),
-            appData: liveApp || {
-              id: appId,
-              name: fsDoc?.fallbackData?.appName || 'Deleted / Missing App',
-              mainImage: fsDoc?.fallbackData?.appImage || '',
-              category: fsDoc?.fallbackData?.category || 'General',
-              rating: fsDoc?.fallbackData?.rating || 4.5,
-              version: fsDoc?.fallbackData?.version || '1.0',
-              itemType: fsDoc?.fallbackData?.itemType || 'app',
-              isDeleted: !liveApp
-            }
-          };
-        });
-
-        setSavedItems(combined);
-        setLoading(false);
-      }).catch(err => {
-        console.error("Error loading saved apps from Firestore:", err);
-        const appsMap = new Map();
-        ctxApps.forEach(d => appsMap.set(d.id, d));
-
-        const combined: SavedAppRecord[] = localSavedIds.map(appId => {
-          const liveApp = appsMap.get(appId);
-          return {
-            savedDocId: `${user.uid}_${appId}`,
-            appId,
-            savedAt: new Date(),
-            appData: liveApp || {
-              id: appId,
-              name: 'Saved App',
-              mainImage: '',
-              category: 'General',
-              rating: 4.5,
-              version: '1.0',
-              itemType: 'app'
-            }
-          };
-        });
-
-        setSavedItems(combined);
-        setLoading(false);
-      });
+    const combined: SavedAppRecord[] = localSavedIds.map(appId => {
+      const liveApp = appsMap.get(appId);
+      return {
+        savedDocId: `${user.uid}_${appId}`,
+        appId,
+        savedAt: new Date(),
+        appData: liveApp || {
+          id: appId,
+          name: 'Saved Item',
+          mainImage: '',
+          category: 'General',
+          rating: 4.5,
+          version: '1.0',
+          itemType: 'app'
+        }
+      };
     });
+
+    setSavedItems(combined);
+    setLoading(false);
   }, [user, ctxApps, ctxCategories]);
 
   useEffect(() => {
@@ -144,18 +97,10 @@ export default function AdminSavedApps() {
   // 1. Remove from saved list only (Unbookmark)
   const handleRemoveFromSaved = async (savedDocId: string, appId: string) => {
     if (!user) return;
-    try {
-      setActionLoading(savedDocId);
-      toggleLocalSavedApp(user.uid, appId);
-      try {
-        await deleteDoc(doc(db, 'saved_apps', savedDocId));
-      } catch {}
-      setSavedItems(prev => prev.filter(i => i.appId !== appId && i.savedDocId !== savedDocId));
-    } catch (error) {
-      console.error("Error removing bookmark:", error);
-    } finally {
-      setActionLoading(null);
-    }
+    setActionLoading(savedDocId);
+    toggleLocalSavedApp(user.uid, appId);
+    setSavedItems(prev => prev.filter(i => i.appId !== appId && i.savedDocId !== savedDocId));
+    setActionLoading(null);
   };
 
   // 2. Permanently Delete App from Store & Database
@@ -164,14 +109,11 @@ export default function AdminSavedApps() {
     try {
       setActionLoading(savedDocId);
       
-      // Delete from apps collection
+      // Delete from apps collection (1 Delete)
       await deleteDoc(doc(db, 'apps', appId));
 
-      // Clean up bookmark
+      // Clean up local bookmark
       toggleLocalSavedApp(user.uid, appId);
-      try {
-        await deleteDoc(doc(db, 'saved_apps', savedDocId));
-      } catch {}
 
       setSavedItems(prev => prev.filter(i => i.appId !== appId && i.savedDocId !== savedDocId));
       setDeleteConfirm(null);

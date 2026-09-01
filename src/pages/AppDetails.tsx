@@ -206,7 +206,7 @@ export default function AppDetails() {
 
     setSaving(true);
     try {
-      const nowSaved = toggleLocalSavedApp(user.uid, app.id, app);
+      const nowSaved = toggleLocalSavedApp(user.uid, app.id);
       setIsSaved(nowSaved);
     } catch (error) {
       console.error("Save error:", error);
