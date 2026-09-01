@@ -134,12 +134,6 @@ export default function AdminEditApp() {
       };
 
       await updateDoc(doc(db, 'apps', appId), updateData);
-      
-      // Auto-rebuild the 1-read snapshot immediately
-      try {
-      } catch (err) {
-        console.warn('Snapshot rebuild note:', err);
-      }
 
       navigate('/admin/apps');
     } catch (err: any) {

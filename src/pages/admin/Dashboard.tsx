@@ -13,10 +13,14 @@ import {
   Clock, 
   Sparkles,
   ArrowUpRight,
-  RefreshCw
+  RefreshCw,
+  Zap
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useApps } from '../../context/AppsContext';
+import { useSettings } from '../../context/SettingsContext';
+import { rebuildAndSyncCatalog } from '../../lib/catalogSync';
+import { cn } from '../../lib/utils';
 
 interface RecentDownload {
   id: string;
@@ -29,6 +33,8 @@ interface RecentDownload {
 export default function AdminDashboard() {
   const { user } = useAuth();
   const { refreshApps, apps, categories } = useApps();
+  const { settings } = useSettings();
+  const [syncing, setSyncing] = useState(false);
   const [stats, setStats] = useState({
     totalApps: 0,
     totalCategories: 0,
@@ -41,6 +47,21 @@ export default function AdminDashboard() {
   const [recentDownloads, setRecentDownloads] = useState<RecentDownload[]>([]);
   const [topItems, setTopItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const handleMasterSync = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      const res = await rebuildAndSyncCatalog({ incrementCodeVersion: true, note: 'Dashboard Master Release' });
+      await refreshApps(false);
+      alert(`⚡ Success! 1-Read Catalog snapshot built & Code Version updated (v${res.codeVersion})!`);
+    } catch (err) {
+      console.error('Master sync failed:', err);
+      alert('Sync failed. Please try again.');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const loadDashboardData = async () => {
     setLoading(true);
@@ -111,6 +132,16 @@ export default function AdminDashboard() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
+            <Button
+              onClick={handleMasterSync}
+              disabled={syncing}
+              className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-2 transition-all active:scale-95"
+            >
+              <Zap size={15} className={cn("fill-current", syncing && "animate-spin")} />
+              <span>
+                {syncing ? 'Building Catalog & Code...' : `⚡ Build 1-Read Catalog & Publish (v${settings.codeReleaseVersion || 1})`}
+              </span>
+            </Button>
             <Link to="/admin/apps/new">
               <Button className="bg-white hover:bg-blue-50 text-blue-900 font-black text-xs px-4 py-2.5 rounded-xl shadow-lg">
                 + Add Item

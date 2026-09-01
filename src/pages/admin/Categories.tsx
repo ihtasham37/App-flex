@@ -38,18 +38,13 @@ export default function AdminCategories() {
 
     setAdding(true);
     try {
-      await addDoc(collection(db, 'categories'), {
+      const docRef = await addDoc(collection(db, 'categories'), {
         name: newCategory.trim(),
         mainType: selectedMainType,
         createdAt: serverTimestamp()
       });
 
-      // Rebuild the unified snapshot
-      try {
-      } catch (err) {
-        console.warn('Catalog sync failed:', err);
-      }
-
+      setCategories(prev => [...prev, { id: docRef.id, name: newCategory.trim(), mainType: selectedMainType }]);
       setNewCategory('');
     } catch (error) {
       console.error("Error adding category:", error);
@@ -62,12 +57,7 @@ export default function AdminCategories() {
     if (window.confirm('Are you sure you want to delete this category?')) {
       try {
         await deleteDoc(doc(db, 'categories', id));
-        
-        // Rebuild the unified snapshot
-        try {
-        } catch (err) {
-          console.warn('Catalog sync failed:', err);
-        }
+        setCategories(prev => prev.filter(c => c.id !== id));
       } catch (error) {
         console.error("Error deleting category:", error);
       }

@@ -38,12 +38,7 @@ export default function AdminApps() {
     if (window.confirm(`Are you sure you want to delete "${name}"? This action cannot be undone.`)) {
       try {
         await deleteDoc(doc(db, 'apps', itemId));
-        
-        // Rebuild the unified snapshot
-        try {
-        } catch (err) {
-          console.warn('Catalog sync failed:', err);
-        }
+        setItems(prev => prev.filter(item => item.id !== itemId));
       } catch (error) {
         console.error("Delete error:", error);
       }

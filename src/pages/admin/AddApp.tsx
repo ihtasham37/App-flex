@@ -92,12 +92,6 @@ export default function AdminAddApp() {
       };
 
       await addDoc(collection(db, 'apps'), itemData);
-      
-      // Auto-rebuild the 1-read snapshot immediately
-      try {
-      } catch (err) {
-        console.warn('Snapshot rebuild note:', err);
-      }
 
       navigate('/admin/apps');
     } catch (err: any) {

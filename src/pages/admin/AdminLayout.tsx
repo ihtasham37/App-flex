@@ -2,22 +2,19 @@ import React, { useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Package, Users, 
-  LogOut, ShieldCheck, Menu, X, User, Tag, ExternalLink, Settings, Megaphone, Bookmark,
-  Zap, Sparkles
+  LogOut, ShieldCheck, Menu, X, User, Tag, ExternalLink, Settings, Megaphone, Bookmark
 } from 'lucide-react';
 import { auth } from '../../lib/firebase';
 import { signOut } from 'firebase/auth';
 import { cn } from '../../lib/utils';
 import { useSettings } from '../../context/SettingsContext';
 import { AppLogo } from '../../components/ui/AppLogo';
-import { QuickSyncModal } from '../../components/admin/QuickSyncModal';
 
 export default function AdminLayout() {
   const { settings } = useSettings();
   const location = useLocation();
   const navigate = useNavigate();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -144,18 +141,6 @@ export default function AdminLayout() {
            </div>
 
            <div className="flex items-center gap-2.5">
-              <button
-                onClick={() => setIsSyncModalOpen(true)}
-                className="flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-black text-xs px-3.5 py-2 rounded-xl shadow-md shadow-orange-500/20 transition-all active:scale-95"
-                title="Broadcast updates to all active and mobile user devices"
-              >
-                <Zap size={15} className="fill-current" />
-                <span className="hidden sm:inline">⚡ Sync All</span>
-                <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded-md font-mono">
-                  v{settings.codeReleaseVersion || 1}
-                </span>
-              </button>
-
               <Link to="/profile">
                 <div className="flex items-center gap-2 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-xl border border-blue-200 text-blue-700 font-bold text-xs transition-colors">
                    <User size={16} />
@@ -168,12 +153,6 @@ export default function AdminLayout() {
         <div className="p-4 md:p-8 max-w-6xl mx-auto">
           <Outlet />
         </div>
-
-        {/* Global Quick Sync Modal */}
-        <QuickSyncModal
-          isOpen={isSyncModalOpen}
-          onClose={() => setIsSyncModalOpen(false)}
-        />
       </main>
     </div>
   );

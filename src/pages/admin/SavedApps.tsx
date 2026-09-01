@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { 
   collection, query, where, deleteDoc, doc, 
   getDocs, setDoc, updateDoc, increment, serverTimestamp 
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useApps } from '../../context/AppsContext';
+import { getLocalSavedAppIds, toggleLocalSavedApp } from '../../lib/savedApps';
 
 interface SavedAppRecord {
   savedDocId: string;
@@ -35,17 +36,20 @@ export default function AdminSavedApps() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
 
-  useEffect(() => {
+  const loadSavedItems = useCallback(() => {
     setCategories(ctxCategories);
     if (!user) {
+      setSavedItems([]);
       setLoading(false);
       return;
     }
 
+    const localSavedIds = getLocalSavedAppIds(user.uid);
+
     import('firebase/firestore').then(({ getDocs, query, where, collection }) => {
       const q = query(collection(db, 'saved_apps'), where('userId', '==', user.uid));
       getDocs(q).then((savedSnap) => {
-        const savedDocs = savedSnap.docs.map(d => ({
+        const firestoreDocs = savedSnap.docs.map(d => ({
           savedDocId: d.id,
           appId: d.data().appId,
           savedAt: d.data().savedAt,
@@ -55,21 +59,26 @@ export default function AdminSavedApps() {
         const appsMap = new Map();
         ctxApps.forEach(d => appsMap.set(d.id, d));
 
-        const combined = savedDocs.map(item => {
-          const liveApp = appsMap.get(item.appId);
+        const allAppIds = new Set<string>();
+        localSavedIds.forEach(id => allAppIds.add(id));
+        firestoreDocs.forEach(d => allAppIds.add(d.appId));
+
+        const combined: SavedAppRecord[] = Array.from(allAppIds).map(appId => {
+          const fsDoc = firestoreDocs.find(d => d.appId === appId);
+          const liveApp = appsMap.get(appId);
           return {
-            savedDocId: item.savedDocId,
-            appId: item.appId,
-            savedAt: item.savedAt,
+            savedDocId: fsDoc?.savedDocId || `${user.uid}_${appId}`,
+            appId: appId,
+            savedAt: fsDoc?.savedAt || new Date(),
             appData: liveApp || {
-              id: item.appId,
-              name: item.fallbackData.appName || 'Deleted / Missing App',
-              mainImage: item.fallbackData.appImage || '',
-              category: item.fallbackData.category || 'General',
-              rating: item.fallbackData.rating || 4.5,
-              version: item.fallbackData.version || '1.0',
-              itemType: item.fallbackData.itemType || 'app',
-              isDeleted: true
+              id: appId,
+              name: fsDoc?.fallbackData?.appName || 'Deleted / Missing App',
+              mainImage: fsDoc?.fallbackData?.appImage || '',
+              category: fsDoc?.fallbackData?.category || 'General',
+              rating: fsDoc?.fallbackData?.rating || 4.5,
+              version: fsDoc?.fallbackData?.version || '1.0',
+              itemType: fsDoc?.fallbackData?.itemType || 'app',
+              isDeleted: !liveApp
             }
           };
         });
@@ -77,11 +86,46 @@ export default function AdminSavedApps() {
         setSavedItems(combined);
         setLoading(false);
       }).catch(err => {
-        console.error(err);
+        console.error("Error loading saved apps from Firestore:", err);
+        const appsMap = new Map();
+        ctxApps.forEach(d => appsMap.set(d.id, d));
+
+        const combined: SavedAppRecord[] = localSavedIds.map(appId => {
+          const liveApp = appsMap.get(appId);
+          return {
+            savedDocId: `${user.uid}_${appId}`,
+            appId,
+            savedAt: new Date(),
+            appData: liveApp || {
+              id: appId,
+              name: 'Saved App',
+              mainImage: '',
+              category: 'General',
+              rating: 4.5,
+              version: '1.0',
+              itemType: 'app'
+            }
+          };
+        });
+
+        setSavedItems(combined);
         setLoading(false);
       });
     });
   }, [user, ctxApps, ctxCategories]);
+
+  useEffect(() => {
+    loadSavedItems();
+
+    const handleSavedChanged = () => {
+      loadSavedItems();
+    };
+
+    window.addEventListener('appflex-saved-apps-changed', handleSavedChanged);
+    return () => {
+      window.removeEventListener('appflex-saved-apps-changed', handleSavedChanged);
+    };
+  }, [loadSavedItems]);
 
   const getCategoryName = (catId: string) => {
     if (!catId) return 'General';
@@ -98,10 +142,15 @@ export default function AdminSavedApps() {
   };
 
   // 1. Remove from saved list only (Unbookmark)
-  const handleRemoveFromSaved = async (savedDocId: string) => {
+  const handleRemoveFromSaved = async (savedDocId: string, appId: string) => {
+    if (!user) return;
     try {
       setActionLoading(savedDocId);
-      await deleteDoc(doc(db, 'saved_apps', savedDocId));
+      toggleLocalSavedApp(user.uid, appId);
+      try {
+        await deleteDoc(doc(db, 'saved_apps', savedDocId));
+      } catch {}
+      setSavedItems(prev => prev.filter(i => i.appId !== appId && i.savedDocId !== savedDocId));
     } catch (error) {
       console.error("Error removing bookmark:", error);
     } finally {
@@ -111,23 +160,20 @@ export default function AdminSavedApps() {
 
   // 2. Permanently Delete App from Store & Database
   const handlePermanentDelete = async (appId: string, savedDocId: string) => {
+    if (!user) return;
     try {
       setActionLoading(savedDocId);
       
       // Delete from apps collection
       await deleteDoc(doc(db, 'apps', appId));
 
-      // Also clean up any bookmark records
+      // Clean up bookmark
+      toggleLocalSavedApp(user.uid, appId);
       try {
         await deleteDoc(doc(db, 'saved_apps', savedDocId));
       } catch {}
 
-      // Sync unified snapshot for 33k users
-      try {
-      } catch (err) {
-        console.warn('Catalog sync failed:', err);
-      }
-
+      setSavedItems(prev => prev.filter(i => i.appId !== appId && i.savedDocId !== savedDocId));
       setDeleteConfirm(null);
     } catch (error) {
       console.error("Permanent delete error:", error);
@@ -414,7 +460,7 @@ export default function AdminSavedApps() {
 
                   {/* 5. Remove Bookmark Only */}
                   <button
-                    onClick={() => handleRemoveFromSaved(savedDocId)}
+                    onClick={() => handleRemoveFromSaved(savedDocId, appId)}
                     disabled={actionLoading === savedDocId}
                     className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
                     title="Remove from saved bookmarks"
